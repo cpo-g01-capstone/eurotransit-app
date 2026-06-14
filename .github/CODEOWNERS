@@ -1,0 +1,35 @@
+# EuroTransit — Application Repository CODEOWNERS
+#
+# Roles:
+#   @vojtech-n       Delivery owner       — CI workflows, justfile, GitOps boundary
+#   @giova95         Resilience owner     — probes, circuit breakers, bulkheads, k6
+#   @Lollegro        Domain & async owner — orders, notifications, Kafka pipeline
+#   @marcodonatucci  Observability + PM   — metrics instrumentation, k6 scripts
+#   @MauroC0l        Data & consistency   — inventory, payments, idempotency
+
+# Default: every PR needs at least one review
+*                                             @vojtech-n @giova95 @Lollegro @marcodonatucci @MauroC0l
+
+# ── Delivery owner — CI workflows are the GitOps boundary ────────────────────
+.github/workflows/                            @vojtech-n
+justfile                                      @vojtech-n
+.claude/                                      @vojtech-n
+.agent/                                       @vojtech-n
+
+# ── Domain & async owner — coroutine pipeline ────────────────────────────────
+backend/orders/                               @Lollegro
+backend/notifications/                        @Lollegro
+
+# ── Data & consistency owner ─────────────────────────────────────────────────
+backend/inventory/                            @MauroC0l
+backend/payments/                             @MauroC0l
+
+# ── Observability & verification — metrics instrumentation ───────────────────
+tests/k6/                                     @marcodonatucci
+backend/catalog/                              @marcodonatucci
+
+# ── Resilience owner — probes and resilience patterns cross all services ─────
+# (covered by default rule; giova95 reviews any PR touching probe config)
+
+# ── Graded collective deliverables ───────────────────────────────────────────
+docs/roles.md                                 @vojtech-n @giova95 @Lollegro @marcodonatucci @MauroC0l

@@ -1,0 +1,52 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Write(backend/**)",
+      "Write(frontend/**)",
+      "Write(tests/**)",
+      "Write(docs/**)",
+      "Write(.agent/**)",
+      "Write(justfile)",
+      "Bash(./gradlew build *)",
+      "Bash(./gradlew test *)",
+      "Bash(./gradlew bootRun *)",
+      "Bash(./gradlew bootBuildImage *)",
+      "Bash(./gradlew lint *)",
+      "Bash(./gradlew check *)",
+      "Bash(docker build *)",
+      "Bash(docker run *)",
+      "Bash(docker stop *)",
+      "Bash(docker rm *)",
+      "Bash(just build *)",
+      "Bash(just test *)",
+      "Bash(just lint *)",
+      "Bash(just verify *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git status)",
+      "Bash(git show *)"
+    ],
+    "deny": [
+      "Read(.env*)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Read(**/*-not-to-be-versioned*)",
+      "Write(.env*)",
+      "Write(**/*.pem)",
+      "Write(**/*.key)",
+      "Write(.github/**)",
+      "Write(.claude/settings.json)",
+      "Bash(git push *)",
+      "Bash(git commit *)",
+      "Bash(kubectl *)",
+      "Bash(helm *)",
+      "Bash(az *)",
+      "Bash(kubeseal *)",
+      "Bash(docker push *)",
+      "Bash(rm -rf *)",
+      "Bash(curl * | bash *)",
+      "Bash(wget * | bash *)"
+    ]
+  }
+}

@@ -1,0 +1,54 @@
+# EuroTransit CI workflow
+# Triggers: push to main, pull_request targeting main
+# Jobs: detect-changes → build/test per service → push to ACR → update config-repo
+#
+# TODO: fill in ACR name, config-repo name, and service build steps
+# Owner: @vojtech-n
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: "<acr-name>.azurecr.io"
+
+jobs:
+  detect-changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      catalog: ${{ steps.filter.outputs.catalog }}
+      orders: ${{ steps.filter.outputs.orders }}
+      inventory: ${{ steps.filter.outputs.inventory }}
+      payments: ${{ steps.filter.outputs.payments }}
+      notifications: ${{ steps.filter.outputs.notifications }}
+      short_sha: ${{ steps.sha.outputs.short }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Compute short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+      - name: Filter changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            catalog:
+              - 'backend/catalog/**'
+            orders:
+              - 'backend/orders/**'
+            inventory:
+              - 'backend/inventory/**'
+            payments:
+              - 'backend/payments/**'
+            notifications:
+              - 'backend/notifications/**'
+
+  # TODO: add build-<service> jobs per service (see Lab04 CI example in CLAUDE.md)
+  # TODO: add update-gitops job (see Lab04 CI example in CLAUDE.md)

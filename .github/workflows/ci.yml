@@ -1,10 +1,16 @@
-# EuroTransit CI workflow
-# Triggers: push to main, pull_request targeting main
-# Jobs: detect-changes → build/test per service → push to ACR → update config-repo
+# EuroTransit — Application CI (EM-15)
 #
-# TODO: fill in ACR name, config-repo name, and service build steps
-# Owner: @vojtech-n
-
+# Pipeline (per KICKOFF §5.2 and CLAUDE.md "CI rules"):
+#   changes ─► build-test ─► images (GHCR) ─► update-gitops (bump config repo)
+#
+# Guarantees enforced here:
+#   - CI holds NO cluster credentials. Deployment is pull-based: this workflow only
+#     builds/tests, pushes immutable images, and bumps image tags in the config repo.
+#     Argo CD reconciles. There is no kubectl/helm/az anywhere in this file.
+#   - Images are tagged with the 7-char Git SHA (immutable); `latest` only on main.
+#   - Least-privilege: top-level token is read-only; jobs widen scope only as needed.
+#
+# Owner: @vojtech-n (Delivery). This file lives on the GitOps boundary — review carefully.
 name: CI
 
 on:
@@ -13,42 +19,229 @@ on:
   pull_request:
     branches: [main]
 
+# Read-only by default; individual jobs request more (packages:write, attestations).
+permissions:
+  contents: read
+
+# One run per ref; cancel superseded runs to save minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
-  REGISTRY: "<acr-name>.azurecr.io"
+  REGISTRY: ghcr.io
+  # Final image name: ghcr.io/<owner>/eurotransit-<service>
+  IMAGE_PREFIX: eurotransit
+  JAVA_VERSION: "21"
+  # No Gradle wrapper is committed yet (see EM-13 follow-ups), so CI pins the Gradle
+  # version explicitly. Once `gradlew` + gradle/wrapper/ are committed, drop
+  # `gradle-version` and call `./gradlew` instead.
+  GRADLE_VERSION: "8.9"
 
 jobs:
-  detect-changes:
-    name: Detect changes
+  # ── 1. Work out which service images need (re)building ───────────────────────
+  changes:
+    name: Detect changed services
     runs-on: ubuntu-latest
     outputs:
-      catalog: ${{ steps.filter.outputs.catalog }}
-      orders: ${{ steps.filter.outputs.orders }}
-      inventory: ${{ steps.filter.outputs.inventory }}
-      payments: ${{ steps.filter.outputs.payments }}
-      notifications: ${{ steps.filter.outputs.notifications }}
+      services: ${{ steps.matrix.outputs.services }}
       short_sha: ${{ steps.sha.outputs.short }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Compute short SHA
-        id: sha
-        run: echo "short=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
-      - name: Filter changed paths
-        uses: dorny/paths-filter@v3
+      - id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+      - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
+            shared:
+              - 'build.gradle.kts'
+              - 'settings.gradle.kts'
+              - 'gradle.properties'
+              - 'gradle/**'
+              - 'gradlew'
+              - 'gradlew.bat'
+              - '.github/workflows/ci.yml'
             catalog:
-              - 'backend/catalog/**'
+              - 'catalog-service/**'
             orders:
-              - 'backend/orders/**'
+              - 'orders-service/**'
             inventory:
-              - 'backend/inventory/**'
+              - 'inventory-service/**'
             payments:
-              - 'backend/payments/**'
+              - 'payments-service/**'
             notifications:
-              - 'backend/notifications/**'
+              - 'notifications-service/**'
+      - id: matrix
+        # A shared change (root build, settings, the workflow itself) rebuilds all
+        # services; otherwise only the services whose directory changed.
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.filter.outputs.shared }}" == "true" ]]; then
+            services='["catalog","orders","inventory","payments","notifications"]'
+          else
+            services=$(jq -c -n \
+              --argjson catalog ${{ steps.filter.outputs.catalog }} \
+              --argjson orders ${{ steps.filter.outputs.orders }} \
+              --argjson inventory ${{ steps.filter.outputs.inventory }} \
+              --argjson payments ${{ steps.filter.outputs.payments }} \
+              --argjson notifications ${{ steps.filter.outputs.notifications }} \
+              '[ {catalog:$catalog,orders:$orders,inventory:$inventory,payments:$payments,notifications:$notifications}
+                 | to_entries[] | select(.value) | .key ]')
+          fi
+          echo "services=$services" >> "$GITHUB_OUTPUT"
+          echo "Services to image: $services"
 
-  # TODO: add build-<service> jobs per service (see Lab04 CI example in CLAUDE.md)
-  # TODO: add update-gitops job (see Lab04 CI example in CLAUDE.md)
+  # ── 2. Compile + test the whole multi-module build (PR gate) ─────────────────
+  build-test:
+    name: Build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+          # Only the default branch writes the shared cache; PRs read it.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - name: Build, compile and run unit tests
+        run: gradle build --no-daemon --stacktrace
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: '**/build/reports/tests/**'
+          retention-days: 7
+
+  # ── 3. Build & push immutable images to GHCR (main only) ─────────────────────
+  images:
+    name: Image (${{ matrix.service }})
+    needs: [changes, build-test]
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write       # push to GHCR via GITHUB_TOKEN
+      id-token: write        # OIDC for provenance attestation
+      attestations: write    # record build provenance
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJSON(needs.changes.outputs.services) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+          cache-read-only: true
+      - name: Build executable jar
+        # The service Dockerfile COPYs build/libs/*SNAPSHOT.jar, so the boot jar
+        # must exist in the build context before docker build.
+        run: gradle :${{ matrix.service }}-service:bootJar --no-daemon
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}-service
+          file: ./${{ matrix.service }}-service/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+  # ── 4. Bump image tags in the config repo → Argo CD reconciles ───────────────
+  update-gitops:
+    name: Update GitOps (config repo)
+    needs: [changes, images]
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.services != '[]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read   # writes target the OTHER repo via CONFIG_REPO_PAT, not this one
+    env:
+      CONFIG_REPO: ${{ github.repository_owner }}/eurotransit-config
+      CONFIG_REPO_PAT: ${{ secrets.CONFIG_REPO_PAT }}
+      VALUES_PATH: deploy/charts/eurotransit/values.yaml
+    steps:
+      - name: Verify cross-repo token is configured
+        id: gate
+        run: |
+          if [[ -z "$CONFIG_REPO_PAT" ]]; then
+            echo "::warning::CONFIG_REPO_PAT secret is not set — skipping GitOps bump. \
+            Add a fine-grained PAT (contents:read+write on $CONFIG_REPO) to enable it."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Checkout config repo
+        if: steps.gate.outputs.ready == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.CONFIG_REPO }}
+          token: ${{ env.CONFIG_REPO_PAT }}
+          path: config
+      - name: Bump image tags
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          VALUES="config/${VALUES_PATH}"
+          if [[ ! -f "$VALUES" ]]; then
+            echo "::warning::$VALUES_PATH not found in $CONFIG_REPO yet (Helm chart task pending) — nothing to bump."
+            exit 0
+          fi
+          for svc in $(echo '${{ needs.changes.outputs.services }}' | jq -r '.[]'); do
+            echo "Setting .${svc}.image.tag = ${{ needs.changes.outputs.short_sha }}"
+            yq -i ".${svc}.image.tag = \"${{ needs.changes.outputs.short_sha }}\"" "$VALUES"
+          done
+      - name: Commit and push
+        if: steps.gate.outputs.ready == 'true'
+        working-directory: config
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No image-tag changes to commit."
+            exit 0
+          fi
+          git commit -m "ci(eurotransit-app): bump image tags to ${{ needs.changes.outputs.short_sha }}"
+          git push

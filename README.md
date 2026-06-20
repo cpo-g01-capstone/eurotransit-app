@@ -32,11 +32,28 @@ just load-baseline          # baseline k6 traffic against the deployed cluster
 
 ## CI/CD
 
-CI builds and tests each service, then pushes immutable images to ACR.
-After a successful push to `main`, CI commits new image tags to the configuration repository.
-Argo CD detects the change and reconciles the cluster.
+GitHub Actions (`.github/workflows/ci.yml`) runs on every PR and on push to `main`:
+
+1. **changes** — detects which `*-service` modules changed (a root/`shared` change rebuilds all).
+2. **build-test** — `gradle build` compiles the multi-module project and runs unit tests (PR gate).
+3. **images** (main only) — builds each changed service's boot jar, then builds and pushes an
+   immutable image to **GHCR** (`ghcr.io/<owner>/eurotransit-<service>`), tagged with the 7-char
+   Git SHA (`latest` only on `main`), with a build-provenance attestation.
+4. **update-gitops** (main only) — bumps the image tags in
+   `deploy/charts/eurotransit/values.yaml` in the configuration repository (via `CONFIG_REPO_PAT`).
+   Argo CD detects the change and reconciles the cluster.
 
 **CI never holds cluster credentials. Deployment happens through Git.**
+
+### Required secrets
+
+| Secret | Scope | Used by |
+|--------|-------|---------|
+| `GITHUB_TOKEN` | automatic (`packages: write`) | push images to GHCR |
+| `CONFIG_REPO_PAT` | fine-grained PAT, `contents: read+write` on `eurotransit-config` only | the GitOps tag bump |
+
+Until `CONFIG_REPO_PAT` (and the Helm chart `values.yaml`) exist, the `update-gitops` job
+skips gracefully with a warning instead of failing.
 
 ## Team roles
 

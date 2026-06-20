@@ -98,6 +98,9 @@ jobs:
   build-test:
     name: Build & test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write       # publish the JUnit test report as a check run
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -111,13 +114,54 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Build, compile and run unit tests
         run: gradle build --no-daemon --stacktrace
-      - name: Upload test reports on failure
+      - name: Publish test report
+        # Runs even when tests fail, so results are annotated on the PR.
+        if: ${{ !cancelled() }}
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: '**/build/test-results/test/TEST-*.xml'
+          detailed_summary: true
+          include_passed: true
+          # The gradle step already fails the job on a test failure; this step
+          # only surfaces the results (avoid a confusing double failure).
+          fail_on_failure: false
+      - name: Upload test & build reports on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
           path: '**/build/reports/tests/**'
           retention-days: 7
+
+  # ── 2b. Static analysis (detekt) — advisory until baselined ──────────────────
+  code-checks:
+    name: Static analysis (detekt)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+          cache-read-only: true
+      - name: Run detekt
+        # Advisory: applied via init script, never blocks the pipeline yet.
+        # Flip to a hard gate once a detekt config + baseline are committed.
+        continue-on-error: true
+        run: gradle --init-script config/detekt-init.gradle.kts detekt --continue --no-daemon
+      - name: Upload detekt reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: detekt-reports
+          path: '**/build/reports/detekt/**'
+          retention-days: 7
+          if-no-files-found: ignore
 
   # ── 3. Build & push immutable images to GHCR (main only) ─────────────────────
   images:

@@ -35,7 +35,11 @@ just load-baseline          # baseline k6 traffic against the deployed cluster
 GitHub Actions (`.github/workflows/ci.yml`) runs on every PR and on push to `main`:
 
 1. **changes** — detects which `*-service` modules changed (a root/`shared` change rebuilds all).
-2. **build-test** — `gradle build` compiles the multi-module project and runs unit tests (PR gate).
+2. **build-test** — `gradle build` compiles the multi-module project and runs unit tests (PR gate);
+   results are published as a JUnit check on the PR.
+2b. **code-checks** — runs **detekt** static analysis via `config/detekt-init.gradle.kts`
+   (advisory for now; reports uploaded as an artifact). Run locally with
+   `gradle --init-script config/detekt-init.gradle.kts detekt`.
 3. **images** (main only) — builds each changed service's boot jar, then builds and pushes an
    immutable image to **GHCR** (`ghcr.io/<owner>/eurotransit-<service>`), tagged with the 7-char
    Git SHA (`latest` only on `main`), with a build-provenance attestation.

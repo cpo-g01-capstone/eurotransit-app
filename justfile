@@ -53,7 +53,7 @@ verify service:
     curl -f http://localhost:8080/actuator/health/readiness || (docker stop et-verify-{{service}} && exit 1)
     docker stop et-verify-{{service}}
     docker rm et-verify-{{service}}
-    @echo "✅ {{service}} verification passed"
+    @echo "{{service}} verification passed"
 
 # Lint Helm chart (requires config-repo checked out as sibling directory)
 helm-lint:

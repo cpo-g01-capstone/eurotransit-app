@@ -29,3 +29,5 @@ replay_pid*
 # Personal/local agent overrides — not shared
 .agent/local/
 .claude.local.md
+
+.gradle

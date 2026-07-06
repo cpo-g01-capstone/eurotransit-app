@@ -25,4 +25,21 @@ interface RouteRepository : CoroutineCrudRepository<Route, UUID> {
         """
     )
     suspend fun reserveSeats(routeId: UUID, seats: Int, expectedVersion: Int): Int
+
+    /**
+     * Pure atomic seat decrement — no version check.
+     * The WHERE clause alone guarantees the never-oversell invariant:
+     * PostgreSQL acquires a row-level lock during UPDATE, so only one
+     * concurrent caller can succeed when available_seats drops to zero.
+     */
+    @Modifying
+    @Query(
+        """
+        UPDATE routes 
+        SET available_seats = available_seats - :seats
+        WHERE id = :routeId 
+          AND available_seats >= :seats
+        """
+    )
+    suspend fun atomicReserveSeats(routeId: UUID, seats: Int): Int
 }

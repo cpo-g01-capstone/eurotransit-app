@@ -34,8 +34,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health, prometheus
+        include: health, prometheus, shutdown
   endpoint:
+    shutdown:
+      enabled: true
     health:
       probes:
         enabled: true

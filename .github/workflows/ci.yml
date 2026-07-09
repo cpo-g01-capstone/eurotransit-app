@@ -65,9 +65,7 @@ jobs:
         run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
       - uses: dorny/paths-filter@v3
         id: filter
-        # paths-filter needs a diff base; on manual dispatch there isn't one, so
-        # only run it for push events. Dispatch falls back to building all (below).
-        if: github.event_name == 'push'
+        # paths-filter needs a diff base; only run it for push events.
         with:
           filters: |
             shared:

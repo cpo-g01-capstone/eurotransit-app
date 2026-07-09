@@ -41,7 +41,7 @@ env:
   REGISTRY: acreurotransitg01.azurecr.io
   # `az acr login --name <ACR_NAME>` takes the bare registry name, not the host.
   ACR_NAME: acreurotransitg01
-  # Final image name: acreurotransitg01.azurecr.io/eurotransit-<service>
+  # Final image name: acreurotransitg01.azurecr.io/eurotransit/<service>
   IMAGE_PREFIX: eurotransit
   JAVA_VERSION: "21"
   # No Gradle wrapper is committed yet (see EM-13 follow-ups), so CI pins the Gradle
@@ -225,8 +225,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          # ACR has no owner namespace: <registry>/eurotransit-<service>
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          # ACR supports nested repo paths: <registry>/eurotransit/<service>
+          # (must match the chart's `repository: eurotransit/<service>` in config-repo values.yaml).
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
           tags: |
             type=sha,prefix=,format=short
             type=raw,value=latest,enable={{is_default_branch}}
@@ -245,7 +246,7 @@ jobs:
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
@@ -267,24 +268,23 @@ jobs:
       # PAT: org-owned (survives any one person leaving), scoped to eurotransit-config
       # only, and short-lived (~1h, minted per run). Decision: config-repo ADR 0007;
       # setup: eurotransit-config/infra/gitops-writeback-app/README.md.
-      - name: Verify the GitOps write-back App is configured
-        id: gate
+      # This job only runs on main after images were pushed. A missing write-back
+      # App would mean new images sit in ACR but the cluster never gets them — so
+      # FAIL here rather than skip. A green run MUST mean the tag was bumped.
+      - name: Require the GitOps write-back App
         env:
           APP_ID: ${{ secrets.CONFIG_REPO_APP_ID }}
           APP_KEY: ${{ secrets.CONFIG_REPO_APP_PRIVATE_KEY }}
         run: |
           if [[ -z "$APP_ID" || -z "$APP_KEY" ]]; then
-            echo "::warning::CONFIG_REPO_APP_ID / CONFIG_REPO_APP_PRIVATE_KEY not set — \
-            skipping GitOps bump. Install the GitOps write-back GitHub App on $CONFIG_REPO \
-            (Contents: write) and add its App ID + private key as Actions secrets. See \
+            echo "::error::CONFIG_REPO_APP_ID / CONFIG_REPO_APP_PRIVATE_KEY not set — \
+            cannot write image tags to $CONFIG_REPO. Install the GitOps write-back GitHub \
+            App (Contents: write) and add its App ID + private key as Actions secrets. See \
             eurotransit-config/infra/gitops-writeback-app/README.md."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
+            exit 1
           fi
       - name: Mint a short-lived config-repo token (GitHub App)
         id: app-token
-        if: steps.gate.outputs.ready == 'true'
         uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.CONFIG_REPO_APP_ID }}
@@ -293,33 +293,29 @@ jobs:
           repositories: eurotransit-config
       - name: Resolve the App's bot user id (for commit attribution)
         id: bot
-        if: steps.gate.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
         run: echo "user-id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
       - name: Checkout config repo
-        if: steps.gate.outputs.ready == 'true'
         uses: actions/checkout@v4
         with:
           repository: ${{ env.CONFIG_REPO }}
           token: ${{ steps.app-token.outputs.token }}
           path: config
       - name: Bump image tags
-        if: steps.gate.outputs.ready == 'true'
         run: |
           set -euo pipefail
           VALUES="config/${VALUES_PATH}"
           if [[ ! -f "$VALUES" ]]; then
-            echo "::warning::$VALUES_PATH not found in $CONFIG_REPO yet (Helm chart task pending) — nothing to bump."
-            exit 0
+            echo "::error::$VALUES_PATH not found in $CONFIG_REPO — the chart moved, or the path/checkout is wrong. Refusing to no-op."
+            exit 1
           fi
           for svc in $(echo '${{ needs.changes.outputs.services }}' | jq -r '.[]'); do
             echo "Setting .${svc}.image.tag = ${{ needs.changes.outputs.short_sha }}"
             yq -i ".${svc}.image.tag = \"${{ needs.changes.outputs.short_sha }}\"" "$VALUES"
           done
       - name: Commit and push
-        if: steps.gate.outputs.ready == 'true'
         working-directory: config
         env:
           APP_SLUG: ${{ steps.app-token.outputs.app-slug }}

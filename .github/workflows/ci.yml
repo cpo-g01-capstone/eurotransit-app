@@ -1,36 +1,52 @@
-# EuroTransit — Application CI (EM-15)
+# EuroTransit — Application CI → Azure Container Registry (EM-32)
 #
-# Pipeline (per KICKOFF §5.2 and CLAUDE.md "CI rules"):
-#   changes ─► build-test ─► images (GHCR) ─► update-gitops (bump config repo)
+# Sibling of ci.yml. Same build/test pipeline, but publishes images to ACR
+# instead of GHCR, authenticating via Azure OIDC federation (no registry
+# password). This file is NOT yet the active pipeline: it is manual-dispatch
+# only so it does not race with ci.yml (GHCR) on pushes to main.
 #
-# Guarantees enforced here:
-#   - CI holds NO cluster credentials. Deployment is pull-based: this workflow only
-#     builds/tests, pushes immutable images, and bumps image tags in the config repo.
-#     Argo CD reconciles. There is no kubectl/helm/az anywhere in this file.
+# To "repoint" the repo onto ACR later:
+#   1. Change `on:` below to `push`/`pull_request` on main (as in ci.yml).
+#   2. Retire ci.yml (delete it, or drop its push/PR triggers).
+#   3. Ensure the AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID
+#      secrets exist and the backing managed identity (id-eurotransit-ci) has
+#      AcrPush on the ACR. Provisioned by eurotransit-config/infra/acr-oidc (EM-41).
+#
+# Guarantees preserved from ci.yml / CLAUDE.md "CI rules":
+#   - No cluster credentials. `az acr login` is registry auth only — there is
+#     NO kubectl / helm / az aks anywhere in this file. Deployment stays
+#     pull-based: this workflow builds/tests, pushes immutable images, and
+#     bumps image tags in the config repo for Argo CD to reconcile.
 #   - Images are tagged with the 7-char Git SHA (immutable); `latest` only on main.
 #   - Least-privilege: top-level token is read-only; jobs widen scope only as needed.
 #
 # Owner: @vojtech-n (Delivery). This file lives on the GitOps boundary — review carefully.
-name: CI
+name: CI (ACR)
 
 on:
+  # Manual only until the repo is repointed onto ACR (see header). Run it from
+  # the Actions tab; image push still only happens for runs on main.
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
-# Read-only by default; individual jobs request more (packages:write, attestations).
+# Read-only by default; individual jobs request more (OIDC, attestations).
 permissions:
   contents: read
 
-# One run per ref; cancel superseded runs to save minutes.
+# One run per ref;
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-acr-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
-  REGISTRY: ghcr.io
-  # Final image name: ghcr.io/<owner>/eurotransit-<service>
+  # Azure Container Registry login server. Auth is via OIDC federation
+  # (azure/login) + `az acr login` — no long-lived registry password.
+  REGISTRY: acreurotransitg01.azurecr.io
+  # `az acr login --name <ACR_NAME>` takes the bare registry name, not the host.
+  ACR_NAME: acreurotransitg01
+  # Final image name: acreurotransitg01.azurecr.io/eurotransit-<service>
   IMAGE_PREFIX: eurotransit
   JAVA_VERSION: "21"
   # No Gradle wrapper is committed yet (see EM-13 follow-ups), so CI pins the Gradle
@@ -54,6 +70,9 @@ jobs:
         run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
       - uses: dorny/paths-filter@v3
         id: filter
+        # paths-filter needs a diff base; on manual dispatch there isn't one, so
+        # only run it for push events. Dispatch falls back to building all (below).
+        if: github.event_name == 'push'
         with:
           filters: |
             shared:
@@ -63,7 +82,7 @@ jobs:
               - 'gradle/**'
               - 'gradlew'
               - 'gradlew.bat'
-              - '.github/workflows/ci.yml'
+              - '.github/workflows/ci-acr.yml'
             catalog:
               - 'backend/catalog-service/**'
             orders:
@@ -75,11 +94,12 @@ jobs:
             notifications:
               - 'backend/notifications-service/**'
       - id: matrix
-        # A shared change (root build, settings, the workflow itself) rebuilds all
-        # services; otherwise only the services whose directory changed.
+        # A manual dispatch (no diff base) rebuilds all services. On push, a
+        # shared change (root build, settings, the workflow itself) rebuilds all;
+        # otherwise only the services whose directory changed.
         run: |
           set -euo pipefail
-          if [[ "${{ steps.filter.outputs.shared }}" == "true" ]]; then
+          if [[ "${{ github.event_name }}" != "push" || "${{ steps.filter.outputs.shared }}" == "true" ]]; then
             services='["catalog","orders","inventory","payments","notifications"]'
           else
             services=$(jq -c -n \
@@ -94,13 +114,13 @@ jobs:
           echo "services=$services" >> "$GITHUB_OUTPUT"
           echo "Services to image: $services"
 
-  # ── 2. Compile + test the whole multi-module build (PR gate) ─────────────────
+  # ── 2. Compile + test the whole multi-module build ───────────────────────────
   build-test:
     name: Build & test
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      checks: write       # publish the JUnit test report as a check run
+      checks: write # publish the JUnit test report as a check run
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -110,16 +130,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: ${{ env.GRADLE_VERSION }}
-          # Only the default branch writes the shared cache; PRs read it.
+          # Only the default branch writes the shared cache; other refs read it.
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - name: Build, compile and run unit tests
         run: gradle build --no-daemon --stacktrace
       - name: Publish test report
-        # Runs even when tests fail, so results are annotated on the PR.
+        # Runs even when tests fail, so results are annotated on the run.
         if: ${{ !cancelled() }}
         uses: mikepenz/action-junit-report@v5
         with:
-          report_paths: '**/build/test-results/test/TEST-*.xml'
+          report_paths: "**/build/test-results/test/TEST-*.xml"
           detailed_summary: true
           include_passed: true
           # The gradle step already fails the job on a test failure; this step
@@ -130,7 +150,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-reports
-          path: '**/build/reports/tests/**'
+          path: "**/build/reports/tests/**"
           retention-days: 7
 
   # ── 2b. Static analysis (detekt) — advisory until baselined ──────────────────
@@ -159,24 +179,23 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: detekt-reports
-          path: '**/build/reports/detekt/**'
+          path: "**/build/reports/detekt/**"
           retention-days: 7
           if-no-files-found: ignore
 
-  # ── 3. Build & push immutable images to GHCR (main only) ─────────────────────
+  # ── 3. Build & push immutable images to ACR (main only) ──────────────────────
   images:
     name: Image (${{ matrix.service }})
     needs: [changes, build-test]
+    # Push only for runs on main; PRs/other refs never publish (CLAUDE.md rule).
     if: >-
-      github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
       needs.changes.outputs.services != '[]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write       # push to GHCR via GITHUB_TOKEN
-      id-token: write        # OIDC for provenance attestation
-      attestations: write    # record build provenance
+      id-token: write # OIDC: Azure federated login + provenance attestation
+      attestations: write # record build provenance
     strategy:
       fail-fast: false
       matrix:
@@ -196,17 +215,23 @@ jobs:
         # must exist in the build context before docker build.
         run: gradle :backend:${{ matrix.service }}-service:bootJar --no-daemon
       - uses: docker/setup-buildx-action@v3
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - name: Azure login (OIDC)
+        # Federated credential — no long-lived secret. The managed identity
+        # backing these values needs the AcrPush role on the ACR.
+        uses: azure/login@v2
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Log in to ACR
+        # Registry auth only — NOT a cluster credential (no az aks / kubectl).
+        run: az acr login --name "${ACR_NAME}"
       - name: Image metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          # ACR has no owner namespace: <registry>/eurotransit-<service>
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
           tags: |
             type=sha,prefix=,format=short
             type=raw,value=latest,enable={{is_default_branch}}
@@ -225,7 +250,7 @@ jobs:
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
@@ -234,33 +259,56 @@ jobs:
     name: Update GitOps (config repo)
     needs: [changes, images]
     if: >-
-      github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
       needs.changes.outputs.services != '[]'
     runs-on: ubuntu-latest
     permissions:
-      contents: read   # writes target the OTHER repo via CONFIG_REPO_PAT, not this one
+      contents: read # writes target the OTHER repo via the GitHub App token, not this one
     env:
       CONFIG_REPO: ${{ github.repository_owner }}/eurotransit-config
-      CONFIG_REPO_PAT: ${{ secrets.CONFIG_REPO_PAT }}
       VALUES_PATH: deploy/charts/eurotransit/values.yaml
     steps:
-      - name: Verify cross-repo token is configured
+      # Cross-repo write-back uses a GitHub App installation token, NOT a personal
+      # PAT: org-owned (survives any one person leaving), scoped to eurotransit-config
+      # only, and short-lived (~1h, minted per run). Decision: config-repo ADR 0007;
+      # setup: eurotransit-config/infra/gitops-writeback-app/README.md.
+      - name: Verify the GitOps write-back App is configured
         id: gate
+        env:
+          APP_ID: ${{ secrets.CONFIG_REPO_APP_ID }}
+          APP_KEY: ${{ secrets.CONFIG_REPO_APP_PRIVATE_KEY }}
         run: |
-          if [[ -z "$CONFIG_REPO_PAT" ]]; then
-            echo "::warning::CONFIG_REPO_PAT secret is not set — skipping GitOps bump. \
-            Add a fine-grained PAT (contents:read+write on $CONFIG_REPO) to enable it."
+          if [[ -z "$APP_ID" || -z "$APP_KEY" ]]; then
+            echo "::warning::CONFIG_REPO_APP_ID / CONFIG_REPO_APP_PRIVATE_KEY not set — \
+            skipping GitOps bump. Install the GitOps write-back GitHub App on $CONFIG_REPO \
+            (Contents: write) and add its App ID + private key as Actions secrets. See \
+            eurotransit-config/infra/gitops-writeback-app/README.md."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
+      - name: Mint a short-lived config-repo token (GitHub App)
+        id: app-token
+        if: steps.gate.outputs.ready == 'true'
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.CONFIG_REPO_APP_ID }}
+          private-key: ${{ secrets.CONFIG_REPO_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: eurotransit-config
+      - name: Resolve the App's bot user id (for commit attribution)
+        id: bot
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: echo "user-id=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
       - name: Checkout config repo
         if: steps.gate.outputs.ready == 'true'
         uses: actions/checkout@v4
         with:
           repository: ${{ env.CONFIG_REPO }}
-          token: ${{ env.CONFIG_REPO_PAT }}
+          token: ${{ steps.app-token.outputs.token }}
           path: config
       - name: Bump image tags
         if: steps.gate.outputs.ready == 'true'
@@ -278,10 +326,13 @@ jobs:
       - name: Commit and push
         if: steps.gate.outputs.ready == 'true'
         working-directory: config
+        env:
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          BOT_UID: ${{ steps.bot.outputs.user-id }}
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${BOT_UID}+${APP_SLUG}[bot]@users.noreply.github.com"
           git add -A
           if git diff --cached --quiet; then
             echo "No image-tag changes to commit."

@@ -1,31 +1,26 @@
-# EuroTransit — Application CI → Azure Container Registry (EM-32)
+# EuroTransit — Application CI (EM-32)
 #
-# Sibling of ci.yml. Same build/test pipeline, but publishes images to ACR
-# instead of GHCR, authenticating via Azure OIDC federation (no registry
-# password). This file is NOT yet the active pipeline: it is manual-dispatch
-# only so it does not race with ci.yml (GHCR) on pushes to main.
+# Build/test the multi-module Kotlin build, then on pushes to main publish
+# immutable service images to Azure Container Registry (ACR), authenticating
+# via Azure OIDC federation (no registry password). After push, image tags are
+# bumped in the config repo for Argo CD to reconcile.
 #
-# To "repoint" the repo onto ACR later:
-#   1. Change `on:` below to `push`/`pull_request` on main (as in ci.yml).
-#   2. Retire ci.yml (delete it, or drop its push/PR triggers).
-#   3. Ensure the AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID
-#      secrets exist and the backing managed identity (id-eurotransit-ci) has
-#      AcrPush on the ACR. Provisioned by eurotransit-config/infra/acr-oidc (EM-41).
-#
-# Guarantees preserved from ci.yml / CLAUDE.md "CI rules":
+# Guarantees (CLAUDE.md "CI rules"):
 #   - No cluster credentials. `az acr login` is registry auth only — there is
 #     NO kubectl / helm / az aks anywhere in this file. Deployment stays
 #     pull-based: this workflow builds/tests, pushes immutable images, and
 #     bumps image tags in the config repo for Argo CD to reconcile.
 #   - Images are tagged with the 7-char Git SHA (immutable); `latest` only on main.
 #   - Least-privilege: top-level token is read-only; jobs widen scope only as needed.
+#   - The managed identity (id-eurotransit-ci) needs AcrPush on the ACR; the
+#     AZURE_CLIENT_ID / AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID secrets back it.
+#     Provisioned by eurotransit-config/infra/acr-oidc (EM-41).
 #
 # Owner: @vojtech-n (Delivery). This file lives on the GitOps boundary — review carefully.
-name: CI (ACR)
+name: CI
 
 on:
-  # Manual only until the repo is repointed onto ACR (see header). Run it from
-  # the Actions tab; image push still only happens for runs on main.
+  # Build/test on PRs to main; build/test + publish to ACR on pushes to main.
   push:
     branches: [main]
   pull_request:
@@ -35,9 +30,9 @@ on:
 permissions:
   contents: read
 
-# One run per ref;
+# One run per ref; never cancel mid-run (the GitOps write-back does a git push).
 concurrency:
-  group: ci-acr-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -82,7 +77,7 @@ jobs:
               - 'gradle/**'
               - 'gradlew'
               - 'gradlew.bat'
-              - '.github/workflows/ci-acr.yml'
+              - '.github/workflows/ci.yml'
             catalog:
               - 'backend/catalog-service/**'
             orders:

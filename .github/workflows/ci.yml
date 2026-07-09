@@ -87,7 +87,7 @@ jobs:
             notifications:
               - 'backend/notifications-service/**'
       - id: matrix
-        # A manual dispatch (no diff base) rebuilds all services. On push, a
+        # On non-push events (e.g. pull_request), rebuild all services. On push, a
         # shared change (root build, settings, the workflow itself) rebuilds all;
         # otherwise only the services whose directory changed.
         run: |

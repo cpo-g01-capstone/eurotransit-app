@@ -1,6 +1,9 @@
 server:
   port: 8085
+  shutdown: graceful
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 50s
   application:
     name: notifications-service
 management:

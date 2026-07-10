@@ -2,10 +2,12 @@ package com.eurotransit.orders.kafka
 
 import com.eurotransit.orders.event.OrderConfirmedEvent
 import com.eurotransit.orders.event.PaymentAuthorizedEvent
+import com.eurotransit.orders.lifecycle.GracefulShutdownManager
 import com.eurotransit.orders.model.OrderStatus
 import com.eurotransit.orders.model.ProcessedEvent
 import com.eurotransit.orders.repository.OrderRepository
 import com.eurotransit.orders.repository.ProcessedEventRepository
+import kotlinx.coroutines.ensureActive
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.support.Acknowledgment
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Component
 import org.springframework.transaction.reactive.TransactionalOperator
 import org.springframework.transaction.reactive.executeAndAwait
 import java.time.Instant
+import kotlin.coroutines.coroutineContext
 
 /**
  * Consumes `payment-authorized` events and confirms orders idempotently.
@@ -21,13 +24,21 @@ import java.time.Instant
  * 1. Read-before-write check on processed_events
  * 2. Business logic + dedup insert in one transaction
  * 3. Downstream publish outside transaction (at-least-once safe)
+ *
+ * Graceful shutdown:
+ * - If the service is draining, new events are skipped (no ack) so Kafka
+ *   rebalances them to a healthy instance.
+ * - In-flight operations are tracked so the shutdown sequence waits for them.
+ * - ensureActive() provides a cooperative cancellation checkpoint before
+ *   downstream publish.
  */
 @Component
 class OrderKafkaConsumer(
     private val orderRepository: OrderRepository,
     private val processedEventRepository: ProcessedEventRepository,
     private val orderKafkaProducer: OrderKafkaProducer,
-    private val transactionalOperator: TransactionalOperator
+    private val transactionalOperator: TransactionalOperator,
+    private val shutdownManager: GracefulShutdownManager
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -39,6 +50,12 @@ class OrderKafkaConsumer(
         ]
     )
     suspend fun handlePaymentAuthorized(event: PaymentAuthorizedEvent, ack: Acknowledgment) {
+        // Cooperative shutdown: skip processing, Kafka will rebalance to healthy instance
+        if (!shutdownManager.isAcceptingTraffic()) {
+            logger.info("Shutting down — not processing event for order {}", event.orderId)
+            return // no ack → will be redelivered after rebalance
+        }
+
         val eventId = "${event.orderId}:payment-authorized"
 
         // 1. Dedup check
@@ -48,29 +65,35 @@ class OrderKafkaConsumer(
             return
         }
 
-        // 2. Business logic + dedup record in ONE transaction
-        transactionalOperator.executeAndAwait {
-            val updated = orderRepository.updateStatus(
-                id = event.orderId,
-                newStatus = OrderStatus.CONFIRMED,
-                expectedStatus = OrderStatus.RESERVED
-            )
-
-            if (updated == 0) {
-                logger.warn(
-                    "Order {} could not be confirmed — not in RESERVED status or not found",
-                    event.orderId
+        // 2-3. Track as in-flight so shutdown waits for completion
+        shutdownManager.trackInflight {
+            // 2. Business logic + dedup record in ONE transaction
+            transactionalOperator.executeAndAwait {
+                val updated = orderRepository.updateStatus(
+                    id = event.orderId,
+                    newStatus = OrderStatus.CONFIRMED,
+                    expectedStatus = OrderStatus.RESERVED
                 )
-                // Still insert dedup record to prevent retries from attempting again
+
+                if (updated == 0) {
+                    logger.warn(
+                        "Order {} could not be confirmed — not in RESERVED status or not found",
+                        event.orderId
+                    )
+                    // Still insert dedup record to prevent retries from attempting again
+                }
+
+                processedEventRepository.save(ProcessedEvent(eventId, Instant.now()))
             }
 
-            processedEventRepository.save(ProcessedEvent(eventId, Instant.now()))
-        }
+            // Cooperative cancellation checkpoint before downstream publish
+            coroutineContext.ensureActive()
 
-        // 3. Publish downstream event (outside TX — at-least-once safe)
-        orderKafkaProducer.sendOrderConfirmed(
-            OrderConfirmedEvent(orderId = event.orderId)
-        )
+            // 3. Publish downstream event (outside TX — at-least-once safe)
+            orderKafkaProducer.sendOrderConfirmed(
+                OrderConfirmedEvent(orderId = event.orderId)
+            )
+        }
 
         ack.acknowledge()
         logger.info("Order {} confirmed after payment authorization", event.orderId)

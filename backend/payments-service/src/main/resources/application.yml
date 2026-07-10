@@ -1,7 +1,10 @@
 server:
   port: 8084
+  shutdown: graceful
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 50s
   application:
     name: payments-service
   r2dbc:

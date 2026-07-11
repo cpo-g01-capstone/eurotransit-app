@@ -20,7 +20,7 @@ import java.time.Instant
 
 /**
  * Consumes `order-failed` and marks the order FAILED — the missing half of the
- * sold-out loop (final-audit BUG-3): Inventory publishes
+ * sold-out loop (adversarial-audit fix, #19): Inventory publishes
  * `order-failed(SOLD_OUT)` when a reservation is impossible, but until now
  * nobody in Orders listened, so the order sat in DRAFT forever.
  *
@@ -32,7 +32,7 @@ import java.time.Instant
  * Idempotency: processed_events dedup + conditional transitions (double layer,
  * same as every money-path consumer).
  *
- * Non-suspend + runBlocking bridge (D5, app ADR 0004).
+ * Non-suspend + runBlocking bridge (team-ratified, ADR 0004).
  */
 @Component
 class OrderFailedConsumer(
@@ -64,7 +64,7 @@ class OrderFailedConsumer(
             return
         }
 
-        runBlocking { handle(event) } // bridge: exceptions must reach the error handler (D5)
+        runBlocking { handle(event) } // bridge: exceptions must reach the error handler (ADR 0004)
         ack.acknowledge()
     }
 

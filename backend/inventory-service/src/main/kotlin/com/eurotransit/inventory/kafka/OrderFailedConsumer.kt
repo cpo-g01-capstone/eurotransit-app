@@ -20,7 +20,7 @@ import java.time.Instant
 /**
  * Consumes `order-failed` (published by Orders when payment redeliveries are
  * exhausted) and releases the order's RESERVED seats — the seat-release
- * compensation that closes the ADR-005 known gap (decision D4).
+ * compensation that closes the ADR 0005 known gap.
  *
  * Idempotency, two layers:
  * 1. processed_events dedup on "orderId:order-failed" (skips clean replays);
@@ -29,7 +29,7 @@ import java.time.Instant
  *    given back twice).
  *
  * NOT a `suspend` @KafkaListener: non-suspend + runBlocking bridge, the pattern
- * ratified as decision D5 (app ADR-004) — a suspend listener would swallow
+ * team-ratified (ADR 0004) — a suspend listener would swallow
  * handler exceptions and break error-handler redelivery on transient DB errors.
  */
 @Component
@@ -62,7 +62,7 @@ class OrderFailedConsumer(
             return
         }
 
-        runBlocking { handle(event) } // bridge: exceptions must reach the error handler (D5)
+        runBlocking { handle(event) } // bridge: exceptions must reach the error handler (ADR 0004)
         ack.acknowledge()
     }
 

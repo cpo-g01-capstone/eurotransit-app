@@ -1,4 +1,4 @@
-// EuroTransit — baseline load (T9 / EM-26).
+// EuroTransit — baseline load (EM-26).
 //
 // Steady checkout traffic against the gateway, with thresholds encoding the
 // RATIFIED SLOs (docs/design/slo-definitions.md, config repo):
@@ -6,7 +6,7 @@
 //   - success:  >= 99.5% non-5xx, where HTTP 429 counts as SUCCESS by design
 //               (load shedding is a controlled refusal, not a failure).
 //
-// Also the tool that validates the SLO numbers empirically (D2) and tunes the
+// Also the tool that validates the ratified SLO numbers empirically and tunes the
 // ADR 0018 breaker knobs. Run via `just load-baseline` (BASE_URL/VUS/DURATION env).
 import http from 'k6/http';
 import { check, sleep } from 'k6';

@@ -14,7 +14,7 @@ data class OrderPlacedEvent(
 
 /**
  * Consumed from topic `order-failed` (produced by Orders when payment
- * redeliveries are exhausted). Seat-release compensation, decision D4.
+ * redeliveries are exhausted). Seat-release compensation (team decision, 2026-07-11).
  * Field shape mirrors the producer's OrderFailedEvent exactly.
  */
 data class OrderFailedEvent(

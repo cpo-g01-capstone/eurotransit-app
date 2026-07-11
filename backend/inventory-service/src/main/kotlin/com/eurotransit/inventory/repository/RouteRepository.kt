@@ -44,7 +44,7 @@ interface RouteRepository : CoroutineCrudRepository<Route, UUID> {
     suspend fun atomicReserveSeats(routeId: UUID, seats: Int): Int
 
     /**
-     * Seat-release compensation (D4): atomic give-back of released seats.
+     * Seat-release compensation: atomic give-back of released seats.
      * The `available_seats + :seats <= total_seats` guard protects invariant I1
      * (never more available than total) — 0 rows back means the caller is trying
      * to release seats that were never (still) reserved: log it, don't corrupt.

@@ -36,10 +36,10 @@ import kotlin.coroutines.coroutineContext
  * - ensureActive() provides a cooperative cancellation checkpoint before
  *   downstream publish.
  *
- * NOT a `suspend` @KafkaListener (final-audit BUG-3): a suspend listener on this
+ * NOT a `suspend` @KafkaListener (adversarial-audit fix, #19): a suspend listener on this
  * Spring Kafka version swallows handler exceptions, so a DB failure here would
  * never reach the DefaultErrorHandler — no redelivery, no recoverer. Non-suspend
- * + runBlocking bridge, the pattern ratified as D5 (app ADR 0004, agent-log case 12).
+ * + runBlocking bridge, the team-ratified bridge pattern (ADR 0004, agent-log case 12).
  */
 @Component
 class OrderKafkaConsumer(
@@ -72,7 +72,7 @@ class OrderKafkaConsumer(
             return // no ack → will be redelivered after rebalance
         }
 
-        runBlocking { handle(event) } // bridge: exceptions must reach the error handler (D5)
+        runBlocking { handle(event) } // bridge: exceptions must reach the error handler (ADR 0004)
         ack.acknowledge()
     }
 

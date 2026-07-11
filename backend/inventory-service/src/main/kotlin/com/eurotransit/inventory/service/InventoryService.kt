@@ -119,7 +119,7 @@ class InventoryService(
     }
 
     /**
-     * Seat-release compensation (D4): releases every RESERVED reservation of a
+     * Seat-release compensation: releases every RESERVED reservation of a
      * terminally FAILED order and gives the seats back to the route.
      *
      * Exactly-once under at-least-once delivery, without optimistic-lock retries:

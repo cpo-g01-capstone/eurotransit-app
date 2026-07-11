@@ -3,7 +3,9 @@ package com.eurotransit.payments.service
 import com.eurotransit.payments.model.PaymentIntent
 import com.eurotransit.payments.repository.PaymentIntentRepository
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.reactor.awaitSingle
 import org.slf4j.LoggerFactory
+import org.springframework.data.r2dbc.core.R2dbcEntityTemplate
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
 import java.util.UUID
@@ -20,7 +22,8 @@ import java.util.UUID
  */
 @Service
 class PaymentService(
-    private val paymentIntentRepository: PaymentIntentRepository
+    private val paymentIntentRepository: PaymentIntentRepository,
+    private val entityTemplate: R2dbcEntityTemplate
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -47,13 +50,14 @@ class PaymentService(
         delay(100) // Simulates external PSP call latency
 
         // 3. Persist payment intent
-        val intent = paymentIntentRepository.save(
+        // insert(), not save(): app-assigned @Id would map to UPDATE (agent-log case 17)
+        val intent = entityTemplate.insert(
             PaymentIntent(
                 orderId = orderId,
                 amount = amount,
                 idempotencyKey = "${orderId}:payment"
             )
-        )
+        ).awaitSingle()
 
         logger.info("Payment authorized: paymentId={}, orderId={}, amount={}", intent.id, orderId, amount)
         return intent

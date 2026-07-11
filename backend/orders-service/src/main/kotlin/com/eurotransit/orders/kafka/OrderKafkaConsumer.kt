@@ -10,9 +10,11 @@ import com.eurotransit.orders.repository.ProcessedEventRepository
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
 import org.apache.kafka.clients.consumer.ConsumerRecord
+import kotlinx.coroutines.reactor.awaitSingle
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.support.Acknowledgment
+import org.springframework.data.r2dbc.core.R2dbcEntityTemplate
 import org.springframework.stereotype.Component
 import org.springframework.transaction.reactive.TransactionalOperator
 import org.springframework.transaction.reactive.executeAndAwait
@@ -43,6 +45,7 @@ import kotlin.coroutines.coroutineContext
 class OrderKafkaConsumer(
     private val orderRepository: OrderRepository,
     private val processedEventRepository: ProcessedEventRepository,
+    private val entityTemplate: R2dbcEntityTemplate,
     private val orderKafkaProducer: OrderKafkaProducer,
     private val transactionalOperator: TransactionalOperator,
     private val shutdownManager: GracefulShutdownManager
@@ -101,7 +104,8 @@ class OrderKafkaConsumer(
                     // Still insert dedup record to prevent retries from attempting again
                 }
 
-                processedEventRepository.save(ProcessedEvent(eventId, Instant.now()))
+                // insert(), not save(): app-assigned @Id would map to UPDATE (agent-log case 17)
+                entityTemplate.insert(ProcessedEvent(eventId, Instant.now())).awaitSingle()
                 updated == 1
             }
 

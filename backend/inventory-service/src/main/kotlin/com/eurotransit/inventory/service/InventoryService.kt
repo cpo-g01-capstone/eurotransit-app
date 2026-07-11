@@ -4,7 +4,9 @@ import com.eurotransit.inventory.model.Reservation
 import com.eurotransit.inventory.repository.ReservationRepository
 import com.eurotransit.inventory.repository.RouteRepository
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.reactor.awaitSingle
 import org.slf4j.LoggerFactory
+import org.springframework.data.r2dbc.core.R2dbcEntityTemplate
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
 import java.util.UUID
@@ -29,7 +31,8 @@ import java.util.UUID
 @Service
 class InventoryService(
     private val routeRepository: RouteRepository,
-    private val reservationRepository: ReservationRepository
+    private val reservationRepository: ReservationRepository,
+    private val entityTemplate: R2dbcEntityTemplate
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -81,13 +84,14 @@ class InventoryService(
             val updated = routeRepository.reserveSeats(routeId, seats, route.version)
             if (updated == 1) {
                 // SUCCESS — seats reserved atomically
-                val reservation = reservationRepository.save(
+                // insert(), not save(): app-assigned @Id would map to UPDATE (agent-log case 17)
+                val reservation = entityTemplate.insert(
                     Reservation(
                         orderId = orderId,
                         routeId = routeId,
                         seats = seats
                     )
-                )
+                ).awaitSingle()
                 val totalAmount = route.price.multiply(BigDecimal(seats))
                 logger.info(
                     "Reserved {} seats on route {} for order {} (total: {}, version: {}→{})",

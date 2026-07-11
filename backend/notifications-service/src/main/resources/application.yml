@@ -47,7 +47,7 @@ management:
   tracing:
     sampling:
       # 100%: traffic is tiny and chaos-experiment analysis needs every trace.
-      # Revisit only if volume ever makes trace storage a cost concern (ADR 0020).
+      # Revisit only if volume ever makes trace storage a cost concern (ADR 0022).
       probability: 1.0
   otlp:
     tracing:

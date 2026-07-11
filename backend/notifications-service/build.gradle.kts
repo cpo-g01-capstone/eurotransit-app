@@ -19,7 +19,7 @@ dependencies {
     // Observability
     implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("io.micrometer:micrometer-tracing-bridge-otel")
-    // OTLP exporter: ships spans to Tempo (T3 / config-repo ADR 0020). Version
+    // OTLP exporter: ships spans to Tempo (T3 / config-repo ADR 0022). Version
     // managed by the Spring Boot BOM alongside the micrometer OTel bridge.
     implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 

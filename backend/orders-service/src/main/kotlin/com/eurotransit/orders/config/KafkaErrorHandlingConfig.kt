@@ -22,7 +22,7 @@ import java.util.UUID
  * loop, while the order sits safely in RESERVED. Every redelivery is idempotent
  * by construction (conditional state transitions + Idempotency-Key on authorize).
  *
- * When retries are exhausted, the recoverer applies the compensation (D4):
+ * When retries are exhausted, the recoverer applies the seat-release compensation:
  * the order is marked FAILED (from RESERVED, or DRAFT if it never got that far)
  * and an `order-failed` event is published — Inventory consumes it and releases
  * any RESERVED seats for the order (idempotently, so publishing on every
@@ -50,7 +50,7 @@ class KafkaErrorHandlingConfig {
         return DefaultErrorHandler({ record, ex ->
             val key = record.key()?.toString()
             logger.error(
-                "Redelivery exhausted for topic={} key={} — marking order FAILED and publishing order-failed (D4).",
+                "Redelivery exhausted for topic={} key={} — marking order FAILED and publishing order-failed (seat-release compensation).",
                 record.topic(), key, ex,
             )
             val orderId = runCatching { UUID.fromString(key) }.getOrNull() ?: return@DefaultErrorHandler

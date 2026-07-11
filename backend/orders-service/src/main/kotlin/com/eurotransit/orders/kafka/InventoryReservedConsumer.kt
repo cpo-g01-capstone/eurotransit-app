@@ -46,7 +46,7 @@ import kotlin.coroutines.coroutineContext
  * version a suspend listener swallows handler exceptions, so the error handler
  * (and therefore the whole fallback above) would never fire. Non-suspend +
  * runBlocking bridge, same as Notifications (agent-log case 12, app ADR-004;
- * the runBlocking exception to the repo rule is decision D5).
+ * the runBlocking exception to the repo rule is team-ratified — ADR 0004).
  */
 @Component
 class InventoryReservedConsumer(

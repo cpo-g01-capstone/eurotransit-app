@@ -100,7 +100,7 @@ class KafkaConfig {
         factory.setCommonErrorHandler(errorHandler)
         factory.containerProperties.ackMode = ContainerProperties.AckMode.RECORD
         factory.containerProperties.isStopImmediate = false  // graceful drain of the in-flight record
-        // Trace-context propagation (T3 / config-repo ADR 0022): this factory is
+        // Trace-context propagation (config-repo ADR 0022): this factory is
         // custom-built, so Boot's spring.kafka.listener.observation-enabled property
         // does NOT apply here — it must be set in code or consumer spans won't join
         // the producer's trace.

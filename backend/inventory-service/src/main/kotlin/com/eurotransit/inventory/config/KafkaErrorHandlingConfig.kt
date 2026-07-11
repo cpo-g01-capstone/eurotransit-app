@@ -12,7 +12,7 @@ import java.util.UUID
 
 /**
  * Bounded, backed-off redelivery for the Inventory consumers — added by the
- * final audit (BUG-3): until now Inventory had NO error handler at all, so a
+ * adversarial audit (#19): until now Inventory had NO error handler at all, so a
  * handler exception meant a silent drop (and with the old suspend listener it
  * never even left the coroutine).
  *

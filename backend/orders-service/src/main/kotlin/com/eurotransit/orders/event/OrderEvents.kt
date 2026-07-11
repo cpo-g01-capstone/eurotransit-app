@@ -28,7 +28,7 @@ data class InventoryReservedEvent(
 
 /**
  * Consumed from topic `payment-authorized` (produced by Payments).
- * `amount` mirrors the producer's field (final-audit #5 — Jackson silently
+ * `amount` mirrors the producer's field (adversarial audit, #19 — Jackson silently
  * dropped it before); nullable so events published before the field existed
  * still deserialize.
  */
@@ -48,7 +48,7 @@ data class OrderConfirmedEvent(
 /**
  * Published to topic `order-failed` when an order is terminally failed
  * (payment redeliveries exhausted — see KafkaErrorHandlingConfig). The
- * seat-release compensation (D4): Inventory consumes this and releases any
+ * seat-release compensation: Inventory consumes this and releases any
  * RESERVED reservation for the order. Carries only the orderId — Inventory
  * owns the reservation lookup, so the event cannot go stale.
  */

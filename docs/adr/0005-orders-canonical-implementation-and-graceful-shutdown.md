@@ -1,13 +1,13 @@
-# ADR 0005 — Canonical Orders implementation (D3) and the graceful-shutdown pattern
+# ADR 0005 — Canonical Orders implementation and the graceful-shutdown pattern
 
 - **Status:** Proposed
 - **Date:** 2026-07-11
 - **Deciders:** implementation decisions by @Lollegro (EM-25/EM-21 convergence);
-  recorded, reviewed and annotated by @giova95; team to ratify (decision D3)
+  recorded, reviewed and annotated by @giova95; team to ratify
 - **Context tags:** orders, kafka, graceful-shutdown, idempotency, resilience
 - **Supersedes / Superseded by:** —
-- **Related:** decision D3 (Orders convergence); config-repo ADR 0018 (synchronous payment
-  authorization + circuit breaker, decision D1); `docs/design/idempotency.md`,
+- **Related:** config-repo ADR 0018 (synchronous payment
+  authorization + circuit breaker); `docs/design/idempotency.md`,
   `docs/design/service-boundaries.md` (config repo); ADR 0001..0004 (notifications).
 
 ## Context
@@ -15,7 +15,7 @@
 Three divergent Orders implementations existed: EM-19 (pipeline without Kafka dedup,
 minimal events), EM-21 (coroutine lifecycle + saga, merged to `main` as
 `api/ config/ domain/ events/ pipeline/`), EM-25 (HTTP + Kafka idempotency). Decision
-**D3** picked EM-25 as the canonical base; EM-19 was deleted. The updated EM-25 branch
+The team's convergence vote picked EM-25 as the canonical base; EM-19 was deleted. The updated EM-25 branch
 (`feature/EM-25-idempotency-payments-orders`, commit `04fa8fd`) now **re-implements the
 EM-21 goals on top of the idempotent base**: this ADR records how, and what must happen
 at merge time.
@@ -95,7 +95,7 @@ idempotencyKey)` — fixes EM-19's orderId-only event that starved Inventory of 
 ## Consequences / next steps
 
 - After merge, the **ADR 0018 work** (synchronous `Orders → Payments` authorize with the
-  Resilience4j breaker, decision D1) is implemented **on this base** — it replaces the
+  Resilience4j breaker) is implemented **on this base** — it replaces the
   Kafka hop `inventory-reserved → Payments` decision point with the sync call, and
   unblocks chaos experiment CE-1.
 - The trade-off "copy per service, no shared Gradle module" is accepted (≈60 lines,

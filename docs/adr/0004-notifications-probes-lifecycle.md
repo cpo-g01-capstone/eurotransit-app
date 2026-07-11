@@ -1,6 +1,6 @@
 # ADR 0004 — Notifications probes & async lifecycle (readiness reflects lifecycle only)
 
-- **Status:** Accepted (runBlocking bridge ratified as D5, 2026-07-11 — see note)
+- **Status:** Accepted (runBlocking bridge ratified by team vote, 2026-07-11 — see note)
 - **Date:** 2026-07-08
 - **Deciders:** _@marcodonatucci (drafted on behalf of the team, notifications); full team to ratify per AI-usage policy_
 - **Context tags:** notifications, probes, lifecycle, async, Pillar A, Pillar C
@@ -8,7 +8,7 @@
 
 ---
 
-> **Implementation note (RATIFIED — decision D5, 2026-07-11):** the `order-confirmed` handler
+> **Implementation note (RATIFIED by team vote, 2026-07-11):** the `order-confirmed` handler
 > could not be a `suspend` @KafkaListener — in this Spring Kafka version that swallows handler
 > exceptions so retries/DLT never fire (agent-log Case 5). It is implemented as a non-suspend
 > handler that takes the raw `ConsumerRecord` and bridges to the suspending service with
@@ -87,7 +87,7 @@ ratification:
 
 - [x] Ratify (or replace) the non-suspend `ConsumerRecord` + `runBlocking` bridge that
       deviates from the "no runBlocking outside bootstrap" rule (agent-log Case 5).
-      **Ratified as D5 on 2026-07-11** — see the implementation note above for scope.
+      **Ratified by team vote on 2026-07-11** — see the implementation note above for scope.
 - [ ] Confirm `db`/`kafka` are **not** wired into the readiness health group
       (`management.endpoint.health.group.readiness.*`); keep the Spring Boot default.
 - [ ] Demonstrate the SIGTERM drain: in-flight handlers finish or cancel cleanly, no orphaned

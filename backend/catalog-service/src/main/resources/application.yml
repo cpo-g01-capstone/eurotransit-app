@@ -41,12 +41,13 @@ management:
       # http_server_requests_seconds is a plain summary (count/sum/max) and
       # every histogram_quantile() in the dashboards AND the
       # CheckoutHighP95Latency alert silently return no data — found during
-      # the T6 canary gate, when the runbook's p95 query came back empty on
+      # the live canary promotion gate, when the runbook's p95 query came back empty on
       # the first real traffic (agent-log case 20).
       percentiles-histogram:
         http.server.requests: true
       # Bucket boundaries aligned with what we actually alert/gate on:
-      # the 300ms canary promotion gate (D6) and the 500ms p95 SLO (D2).
+      # the ratified 300ms canary promotion gate and the 500ms p95 SLO
+      # (config repo: ADR 0026 and docs/design/slo-definitions.md).
       slo:
         http.server.requests: 50ms, 100ms, 200ms, 300ms, 500ms, 1s, 2s
   endpoints:

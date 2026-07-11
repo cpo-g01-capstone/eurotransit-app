@@ -22,10 +22,16 @@ export const options = {
   vus: Number(__ENV.VUS || 3),
   duration: __ENV.DURATION || '3m',
   thresholds: {
-    'http_req_duration{endpoint:place_order}': ['p(95)<500'], // latency SLO
-    checkout_success: ['rate>0.995'],                          // success SLO
+    'http_req_duration{endpoint:place_order}': ['p(95)<500'],    // latency SLO
+    checkout_success: ['rate>0.995'],                             // success SLO
+    // CE-1's containment claim, made executable: Catalog browsing must stay
+    // healthy even while Payments is degraded and the breaker is open.
+    'http_req_duration{endpoint:browse_catalog}': ['p(95)<500'],
+    catalog_healthy: ['rate>0.995'],
   },
 };
+
+const catalogHealthy = new Rate('catalog_healthy');
 
 const success = new Rate('checkout_success');
 const shed = new Rate('shed_429');
@@ -54,6 +60,15 @@ export default function () {
     const id = res.json('orderId');
     const g = http.get(`${BASE}${API}/orders/${id}`, { tags: { endpoint: 'get_order' } });
     check(g, { 'order readable': (r) => r.status === 200 });
+  }
+
+  // Browse traffic — the independent surface CE-1 asserts stays healthy while
+  // Payments is degraded (advisory availability, served from Catalog's AP cache).
+  const browse = http.get(`${BASE}${API}/catalog`, { tags: { endpoint: 'browse_catalog' } });
+  catalogHealthy.add(browse.status === 200);
+  check(browse, { 'catalog browsable': (r) => r.status === 200 });
+  if (__ITER % 5 === 0) {
+    http.get(`${BASE}${API}/catalog/${ROUTE_ID}`, { tags: { endpoint: 'browse_catalog' } });
   }
 
   sleep(1);

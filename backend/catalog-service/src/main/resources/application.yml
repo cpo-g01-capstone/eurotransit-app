@@ -15,3 +15,15 @@ management:
     health:
       probes:
         enabled: true
+  # --- Distributed tracing (money path: "where did this order spend its time?") ---
+  tracing:
+    sampling:
+      # 100%: traffic is tiny and chaos-experiment analysis needs every trace.
+      # Revisit only if volume ever makes trace storage a cost concern (ADR 0022).
+      probability: 1.0
+  otlp:
+    tracing:
+      # Tempo's OTLP/HTTP receiver in the monitoring namespace. The matching
+      # NetworkPolicy egress rule ships in the config repo (default-deny would
+      # silently drop spans otherwise). Local dev: override via env.
+      endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:http://tempo.monitoring.svc.cluster.local:4318/v1/traces}

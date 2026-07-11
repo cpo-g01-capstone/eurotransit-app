@@ -12,6 +12,17 @@ data class OrderPlacedEvent(
     val idempotencyKey: String = ""
 )
 
+/**
+ * Consumed from topic `order-failed` (produced by Orders when payment
+ * redeliveries are exhausted). Seat-release compensation, decision D4.
+ * Field shape mirrors the producer's OrderFailedEvent exactly.
+ */
+data class OrderFailedEvent(
+    val orderId: UUID,
+    val reason: String = "",
+    val timestamp: Instant = Instant.now()
+)
+
 /** Published to topic `inventory-reserved` after seats are reserved. */
 data class InventoryReservedEvent(
     val orderId: UUID,

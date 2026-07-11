@@ -3,6 +3,7 @@ package com.eurotransit.inventory.service
 import com.eurotransit.inventory.model.Reservation
 import com.eurotransit.inventory.repository.ReservationRepository
 import com.eurotransit.inventory.repository.RouteRepository
+import kotlinx.coroutines.flow.toList
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.math.BigDecimal
@@ -111,6 +112,50 @@ class InventoryService(
         }
         // Extreme contention — seats exist but we lost every race
         throw VersionConflictException(routeId, MAX_RETRIES)
+    }
+
+    /**
+     * Seat-release compensation (D4): releases every RESERVED reservation of a
+     * terminally FAILED order and gives the seats back to the route.
+     *
+     * Exactly-once under at-least-once delivery, without optimistic-lock retries:
+     * the conditional RESERVED -> RELEASED transition ([ReservationRepository.markReleased])
+     * can only succeed once per reservation, and seats are given back only when
+     * that transition happened. A replayed `order-failed` event finds status
+     * RELEASED and is a no-op. Transaction boundary is owned by the caller
+     * (same pattern as [reserveSeats]).
+     *
+     * @return number of reservations actually released (0 = nothing to do / replay)
+     */
+    suspend fun releaseSeats(orderId: UUID): Int {
+        var released = 0
+        for (reservation in reservationRepository.findAllByOrderId(orderId).toList()) {
+            if (reservationRepository.markReleased(reservation.id) == 0) {
+                logger.info(
+                    "Reservation {} (order {}) not RESERVED — replay or already released, skipping",
+                    reservation.id, orderId,
+                )
+                continue
+            }
+            val gaveBack = routeRepository.releaseSeats(reservation.routeId, reservation.seats)
+            if (gaveBack == 0) {
+                // I1 guard refused the give-back: releasing these seats would exceed
+                // total_seats. Should be impossible given the transition above — a
+                // loud signal for the chaos-report invariant checks, not silent data
+                // corruption. The reservation stays RELEASED (order is FAILED anyway).
+                logger.error(
+                    "Seat give-back refused for route {} (order {}, {} seats) — invariant I1 guard hit",
+                    reservation.routeId, orderId, reservation.seats,
+                )
+                continue
+            }
+            released++
+            logger.info(
+                "Released {} seats on route {} for failed order {}",
+                reservation.seats, reservation.routeId, orderId,
+            )
+        }
+        return released
     }
 }
 

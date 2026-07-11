@@ -35,11 +35,31 @@ interface RouteRepository : CoroutineCrudRepository<Route, UUID> {
     @Modifying
     @Query(
         """
-        UPDATE routes 
+        UPDATE routes
         SET available_seats = available_seats - :seats
-        WHERE id = :routeId 
+        WHERE id = :routeId
           AND available_seats >= :seats
         """
     )
     suspend fun atomicReserveSeats(routeId: UUID, seats: Int): Int
+
+    /**
+     * Seat-release compensation (D4): atomic give-back of released seats.
+     * The `available_seats + :seats <= total_seats` guard protects invariant I1
+     * (never more available than total) — 0 rows back means the caller is trying
+     * to release seats that were never (still) reserved: log it, don't corrupt.
+     * The caller must have won the RESERVED -> RELEASED reservation transition
+     * first, which makes each release exactly-once.
+     */
+    @Modifying
+    @Query(
+        """
+        UPDATE routes
+        SET available_seats = available_seats + :seats,
+            version = version + 1
+        WHERE id = :routeId
+          AND available_seats + :seats <= total_seats
+        """
+    )
+    suspend fun releaseSeats(routeId: UUID, seats: Int): Int
 }

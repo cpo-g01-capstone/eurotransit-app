@@ -59,16 +59,22 @@ verify service:
 helm-lint:
     helm lint ../config-repo/deploy/charts/eurotransit
 
-# ── k6 load tests ─────────────────────────────────────────────────────────────
+# ── k6 load tests (T9 / EM-26) ────────────────────────────────────────────────
+# Fault injection is NOT simulated client-side any more: real latency/failure
+# injection is done with Chaos Mesh (config repo, `just chaos ce-1-...` etc.);
+# these scripts provide the load + the SLO thresholds to observe it under.
 
-# Baseline traffic (3 VUs, 3 minutes)
+# Baseline traffic — thresholds encode the ratified SLOs (p95<500ms, success>=99.5%, 429=success)
 load-baseline host="https://gXX.cpo2026.it":
     BASE_URL={{host}} VUS=3 DURATION=3m k6 run tests/k6/baseline.js
 
-# Latency injection (800ms delay)
-load-latency host="https://gXX.cpo2026.it":
-    BASE_URL={{host}} VUS=3 DURATION=4m DELAY_MS=800 k6 run tests/k6/baseline.js
+# End-to-end checkout conversion: place -> poll until CONFIRMED/FAILED.
+# Also the steady-state driver to keep running DURING chaos experiments.
+load-e2e host="https://gXX.cpo2026.it":
+    BASE_URL={{host}} VUS=2 DURATION=2m k6 run tests/k6/checkout-e2e.js
 
-# Error injection (20% failure rate)
-load-errors host="https://gXX.cpo2026.it":
-    BASE_URL={{host}} VUS=3 DURATION=4m FAIL_RATE=0.20 k6 run tests/k6/baseline.js
+# CE-2 contention driver: 20 buyers, 2 seats (tiny seeded route). Run while the
+# operator kills the Inventory pod; verdict comes from the DB invariants in the
+# CE-2 report, not from this script.
+load-ce2 host="https://gXX.cpo2026.it":
+    BASE_URL={{host}} k6 run tests/k6/ce2-contention.js

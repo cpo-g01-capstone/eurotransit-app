@@ -8,9 +8,10 @@ import com.eurotransit.orders.model.IdempotencyRecord
 import com.eurotransit.orders.model.Order
 import com.eurotransit.orders.model.OrderStatus
 import com.eurotransit.orders.repository.IdempotencyRecordRepository
-import com.eurotransit.orders.repository.OrderRepository
 import com.fasterxml.jackson.databind.ObjectMapper
+import kotlinx.coroutines.reactor.awaitSingle
 import org.slf4j.LoggerFactory
+import org.springframework.data.r2dbc.core.R2dbcEntityTemplate
 import org.springframework.stereotype.Service
 import org.springframework.transaction.reactive.TransactionalOperator
 import org.springframework.transaction.reactive.executeAndAwait
@@ -19,10 +20,13 @@ import java.util.UUID
 
 @Service
 class OrderService(
-    private val orderRepository: OrderRepository,
     private val idempotencyRecordRepository: IdempotencyRecordRepository,
     private val orderKafkaProducer: OrderKafkaProducer,
     private val transactionalOperator: TransactionalOperator,
+    // Explicit INSERTs: our entities carry app-assigned @Id values, and
+    // repository.save() maps "id present" to UPDATE (0 rows -> error).
+    // See app ADR 0007 / agent-log case 17.
+    private val entityTemplate: R2dbcEntityTemplate,
     private val objectMapper: ObjectMapper
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -58,16 +62,20 @@ class OrderService(
         val responseJson = objectMapper.writeValueAsString(response)
 
         transactionalOperator.executeAndAwait {
-            orderRepository.save(
+            // insert(), NOT repository.save(): both rows carry app-assigned ids,
+            // and save() would issue an UPDATE against a row that doesn't exist
+            // (TransientDataAccessResourceException). This 500 was the FIRST
+            // real POST through the gateway — agent-log case 17.
+            entityTemplate.insert(
                 Order(id = orderId, status = OrderStatus.DRAFT)
-            )
-            idempotencyRecordRepository.save(
+            ).awaitSingle()
+            entityTemplate.insert(
                 IdempotencyRecord(
                     idempotencyKey = idempotencyKey,
                     responsePayload = responseJson,
                     createdAt = Instant.now()
                 )
-            )
+            ).awaitSingle()
         }
 
         // 3. Publish order-placed event (outside TX — at-least-once safe)

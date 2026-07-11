@@ -7,9 +7,11 @@ import com.eurotransit.inventory.repository.ProcessedEventRepository
 import com.eurotransit.inventory.service.InventoryService
 import kotlinx.coroutines.runBlocking
 import org.apache.kafka.clients.consumer.ConsumerRecord
+import kotlinx.coroutines.reactor.awaitSingle
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.support.Acknowledgment
+import org.springframework.data.r2dbc.core.R2dbcEntityTemplate
 import org.springframework.stereotype.Component
 import org.springframework.transaction.reactive.TransactionalOperator
 import org.springframework.transaction.reactive.executeAndAwait
@@ -34,6 +36,7 @@ import java.time.Instant
 class OrderFailedConsumer(
     private val inventoryService: InventoryService,
     private val processedEventRepository: ProcessedEventRepository,
+    private val entityTemplate: R2dbcEntityTemplate,
     private val transactionalOperator: TransactionalOperator,
     private val shutdownManager: GracefulShutdownManager,
 ) {
@@ -80,7 +83,8 @@ class OrderFailedConsumer(
                     "order-failed for order {} ({}): released {} reservation(s)",
                     event.orderId, event.reason, released,
                 )
-                processedEventRepository.save(ProcessedEvent(eventId, Instant.now()))
+                // insert(), not save(): app-assigned @Id would map to UPDATE (agent-log case 17)
+                entityTemplate.insert(ProcessedEvent(eventId, Instant.now())).awaitSingle()
             }
         }
     }

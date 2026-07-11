@@ -20,5 +20,5 @@ deployment decisions live in the **configuration repository** `docs/adr/`.
 | [0002](0002-notifications-dedup-store.md) | Notifications deduplication via a dedicated PostgreSQL store | Accepted | 2026-07-08 |
 | [0003](0003-notifications-failure-handling.md) | Notifications failure handling & offset-commit semantics (at-least-once + DLT) | Accepted | 2026-07-08 |
 | [0004](0004-notifications-probes-lifecycle.md) | Notifications probes & async lifecycle (readiness reflects lifecycle only) | Accepted | 2026-07-08 |
-| [ADR-005](ADR-005-orders-canonical-implementation-and-graceful-shutdown.md) | Canonical Orders implementation (D3) and the graceful-shutdown pattern | Proposed | 2026-07-11 |
+| [0005](0005-orders-canonical-implementation-and-graceful-shutdown.md) | Canonical Orders implementation (D3) and the graceful-shutdown pattern | Proposed | 2026-07-11 |
 | [0006](0006-catalog-event-fed-ap-cache.md) | Catalog: event-fed in-memory AP cache, no database | Proposed | 2026-07-11 |

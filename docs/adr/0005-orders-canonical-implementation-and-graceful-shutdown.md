@@ -1,12 +1,14 @@
-# ADR-005 — Canonical Orders implementation (D3) and the graceful-shutdown pattern
+# ADR 0005 — Canonical Orders implementation (D3) and the graceful-shutdown pattern
 
-- **Status:** Proposed (documents team decision D3 + the EM-25 implementation; needs team review)
+- **Status:** Proposed
 - **Date:** 2026-07-11
-- **Authors:** implementation decisions by @Lollegro, from the EM-25/EM-21
-  convergence work; recorded, reviewed and annotated by @giova95
+- **Deciders:** implementation decisions by @Lollegro (EM-25/EM-21 convergence);
+  recorded, reviewed and annotated by @giova95; team to ratify (decision D3)
+- **Context tags:** orders, kafka, graceful-shutdown, idempotency, resilience
+- **Supersedes / Superseded by:** —
 - **Related:** decision D3 (Orders convergence); config-repo ADR 0018 (synchronous payment
   authorization + circuit breaker, decision D1); `docs/design/idempotency.md`,
-  `docs/design/service-boundaries.md` (config repo); ADR-001..004 (notifications).
+  `docs/design/service-boundaries.md` (config repo); ADR 0001..0004 (notifications).
 
 ## Context
 
@@ -44,7 +46,7 @@ idempotencyKey)` — fixes EM-19's orderId-only event that starved Inventory of 
      Inside the TX it could cancel between UPDATE and COMMIT; after the publish it is useless.
 4. **Catalog / Notifications**: only `server.shutdown: graceful` — no manager. Catalog is
    stateless read-only (WebFlux drains HTTP natively); Notifications already has its own
-   dedup/DLT design (ADR-001..004) and redelivery-safe consumers.
+   dedup/DLT design (ADR 0001..0004) and redelivery-safe consumers.
 
 ### Why this is the right base (theory + assignment)
 

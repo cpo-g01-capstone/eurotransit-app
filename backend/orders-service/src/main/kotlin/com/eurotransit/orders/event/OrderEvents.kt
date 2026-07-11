@@ -12,6 +12,20 @@ data class OrderPlacedEvent(
     val idempotencyKey: String
 )
 
+/**
+ * Consumed from topic `inventory-reserved` (produced by Inventory).
+ * Field shape mirrors the producer's InventoryReservedEvent exactly.
+ * Triggers the synchronous Orders → Payments authorization (ADR 0018).
+ */
+data class InventoryReservedEvent(
+    val orderId: UUID,
+    val routeId: UUID,
+    val seats: Int,
+    val reservationId: UUID,
+    val amount: java.math.BigDecimal,
+    val timestamp: Instant = Instant.now()
+)
+
 /** Consumed from topic `payment-authorized` (produced by Payments). */
 data class PaymentAuthorizedEvent(
     val orderId: UUID,

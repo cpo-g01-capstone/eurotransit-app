@@ -51,3 +51,48 @@ management:
     health:
       probes:
         enabled: true
+
+# In-cluster default = the Payments ClusterIP service (port 80). Override with
+# PAYMENTS_BASE_URL for local dev (e.g. http://localhost:8084).
+payments:
+  base-url: ${PAYMENTS_BASE_URL:http://eurotransit-payments}
+
+# ADR 0018 resilience policy for the synchronous Orders -> Payments authorize call.
+# Values are team-proposed defaults, to tune after the k6 baseline (see the ADR).
+resilience4j:
+  circuitbreaker:
+    instances:
+      payments:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        # open on clear breakage OR on "slow death" (calls succeed but hold threads)
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        slowCallRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+  retry:
+    instances:
+      payments:
+        maxAttempts: 3
+        waitDuration: 250ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2.0
+        # jitter: avoid synchronized retry waves (thundering herd)
+        enableRandomizedWait: true
+        randomizedWaitFactor: 0.5
+        ignoreExceptions:
+          # never hammer an OPEN breaker: fail fast to the Kafka error handler
+          - io.github.resilience4j.circuitbreaker.CallNotPermittedException
+  ratelimiter:
+    instances:
+      checkout:
+        # Backpressure / load shedding on the entry endpoint: beyond this rate the
+        # API answers 429 immediately (timeout 0 = refuse, don't queue). 429 is a
+        # CONTROLLED refusal — excluded from the SLO error budget by design
+        # (docs/design/slo-definitions.md).
+        limitForPeriod: 50
+        limitRefreshPeriod: 1s
+        timeoutDuration: 0

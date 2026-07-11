@@ -10,7 +10,14 @@ dependencies {
     implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
     implementation("io.projectreactor.kotlin:reactor-kotlin-extensions")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
-    
+
+    // Resilience (ADR 0018): circuit breaker + retry + rate limiter on the
+    // synchronous Orders -> Payments call and the checkout entry point.
+    // spring-boot3 starter auto-configures the registries from application.yml
+    // and binds resilience4j_* metrics to Micrometer (needed by CE-1 dashboards).
+    implementation("io.github.resilience4j:resilience4j-spring-boot3:2.2.0")
+    implementation("io.github.resilience4j:resilience4j-kotlin:2.2.0")
+
     // Observability
     implementation("io.micrometer:micrometer-registry-prometheus")
     implementation("io.micrometer:micrometer-tracing-bridge-otel")

@@ -24,6 +24,13 @@ spring:
         # expected type via spring.json.value.default.type instead.
         # (Same setUseTypeHeaders(false) notifications' KafkaConfig always had.)
         spring.json.use.type.headers: false
+        # Target type at the YML level, NOT only in @KafkaListener(properties):
+        # in production the listener-level property never reached the delegate
+        # JsonDeserializer (value came out null and the cache froze at the seed
+        # values), while this consumer-config path is proven by
+        # InventoryReservedDeserializationTest against bytes captured from the
+        # topic. Catalog has exactly one listener, so a global default is safe.
+        spring.json.value.default.type: com.eurotransit.catalog.event.InventoryReservedEvent
     listener:
       # Trace-context propagation (ADR 0022): browse-cache updates join the order's trace.
       observation-enabled: true

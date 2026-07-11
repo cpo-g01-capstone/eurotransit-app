@@ -3,9 +3,30 @@ server:
   shutdown: graceful
 spring:
   lifecycle:
+    # Aligned with the fleet-wide shutdown chain: preStop(5s) + Spring(50s) < 60s grace.
+    # Notifications has no GracefulShutdownManager (best-effort service): Spring drains
+    # HTTP natively and unacked Kafka records are simply redelivered after rebalance.
     timeout-per-shutdown-phase: 50s
   application:
     name: notifications-service
+  r2dbc:
+    url: ${NOTIFICATIONS_DB_R2DBC_URL:r2dbc:postgresql://localhost:5432/notificationsdb}
+    username: ${NOTIFICATIONS_DB_USERNAME:app}
+    password: ${NOTIFICATIONS_DB_PASSWORD:app}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # Flyway runs on JDBC (R2DBC is runtime-only). In Kubernetes set NOTIFICATIONS_DB_JDBC_URL
+    # from the operator secret eurotransit-notifications-db-app (key jdbc-uri).
+    url: ${NOTIFICATIONS_DB_JDBC_URL:jdbc:postgresql://localhost:5432/notificationsdb}
+    user: ${NOTIFICATIONS_DB_USERNAME:app}
+    password: ${NOTIFICATIONS_DB_PASSWORD:app}
+    baseline-on-migrate: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:eurotransit-kafka-kafka-bootstrap.eurotransit:9092}
+    consumer:
+      group-id: notifications
+      auto-offset-reset: earliest
 management:
   endpoints:
     web:

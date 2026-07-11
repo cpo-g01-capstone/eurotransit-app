@@ -12,6 +12,31 @@ Source code, tests, CI workflows, and k6 scripts for the five EuroTransit servic
 | payments | 8084 | Authorizes payment |
 | notifications | 8085 | Sends confirmations |
 
+## Notifications service (Kafka consumer)
+
+The terminal, fully-asynchronous stage of the money path. It consumes `order-confirmed` and
+sends an order-confirmation notification. Design decisions are recorded in `docs/adr/ADR-001..004`.
+
+- **Trigger:** consumes `order-confirmed` only (ADR-001).
+- **Idempotency:** a dedicated PostgreSQL table `sent_notifications` deduplicates by `order_id`
+  with a two-phase `PENDING → SENT` row (ADR-002/003), so redelivery never sends twice.
+- **Delivery:** at-least-once with a manual (`RECORD`) ack; send failures are retried and then
+  routed to `order-confirmed.DLT`; a transient dedup-DB outage blocks-and-lags (does not drop).
+- **Sending:** a log-based stub (`LoggingEmailSender`) with a `notifications_sent_total` metric —
+  the project grades resilience, not real e-mail.
+- **Graceful degradation:** Notifications reaches the pipeline only through Kafka, so a full
+  outage never fails checkout.
+
+Run its tests (requires Docker for Testcontainers PostgreSQL; an embedded Kafka broker is used):
+
+```bash
+./gradlew :backend:notifications-service:test
+```
+
+> On macOS with Docker Desktop, the test task auto-detects the Docker Desktop raw socket and pins
+> the Docker API version / disables Ryuk so Testcontainers works through the API proxy. This is
+> guarded and a no-op on CI/Linux.
+
 ## Prerequisites
 
 - JDK 21

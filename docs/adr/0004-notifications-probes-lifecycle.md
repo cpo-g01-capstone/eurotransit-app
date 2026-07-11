@@ -1,6 +1,6 @@
 # ADR 0004 — Notifications probes & async lifecycle (readiness reflects lifecycle only)
 
-- **Status:** Accepted (open implementation point — see note)
+- **Status:** Accepted (runBlocking bridge ratified as D5, 2026-07-11 — see note)
 - **Date:** 2026-07-08
 - **Deciders:** _@marcodonatucci (drafted on behalf of the team, notifications); full team to ratify per AI-usage policy_
 - **Context tags:** notifications, probes, lifecycle, async, Pillar A, Pillar C
@@ -8,14 +8,16 @@
 
 ---
 
-> **Implementation note (needs team ratification):** the `order-confirmed` handler could not be a
-> `suspend` @KafkaListener — in this Spring Kafka version that swallows handler exceptions so
-> retries/DLT never fire (agent-log Case 5). It is implemented as a non-suspend handler that takes
-> the raw `ConsumerRecord` and bridges to the suspending service with `runBlocking`, which
-> contradicts the `CLAUDE.md` "no runBlocking outside bootstrap" rule. The consumer thread is a
-> dedicated blocking poll loop, so blocking there is arguably correct, but the team must ratify the
-> exception (or choose another bridge). The `CoroutineScope` failure domain still exists and is used
-> by the error-handler recoverer.
+> **Implementation note (RATIFIED — decision D5, 2026-07-11):** the `order-confirmed` handler
+> could not be a `suspend` @KafkaListener — in this Spring Kafka version that swallows handler
+> exceptions so retries/DLT never fire (agent-log Case 5). It is implemented as a non-suspend
+> handler that takes the raw `ConsumerRecord` and bridges to the suspending service with
+> `runBlocking`. The team ratified this as the **standard pattern for every @KafkaListener that
+> needs error-handler semantics** — the one sanctioned exception to the `CLAUDE.md` "no
+> runBlocking outside bootstrap" rule (the consumer thread is a dedicated blocking poll loop, so
+> blocking there is correct). In use in: notifications (`OrderConfirmedListener`), orders
+> (`InventoryReservedConsumer`), inventory (`OrderFailedConsumer`). The `CoroutineScope` failure
+> domain still exists and is used by the error-handler recoverer.
 
 ## Context
 
@@ -83,8 +85,9 @@ Why lifecycle-only:
 This decision was drafted with agent assistance and **must be verified by the team** before
 ratification:
 
-- [ ] Ratify (or replace) the non-suspend `ConsumerRecord` + `runBlocking` bridge that
+- [x] Ratify (or replace) the non-suspend `ConsumerRecord` + `runBlocking` bridge that
       deviates from the "no runBlocking outside bootstrap" rule (agent-log Case 5).
+      **Ratified as D5 on 2026-07-11** — see the implementation note above for scope.
 - [ ] Confirm `db`/`kafka` are **not** wired into the readiness health group
       (`management.endpoint.health.group.readiness.*`); keep the Spring Boot default.
 - [ ] Demonstrate the SIGTERM drain: in-flight handlers finish or cancel cleanly, no orphaned

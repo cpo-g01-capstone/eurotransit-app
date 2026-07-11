@@ -39,6 +39,19 @@ data class OrderConfirmedEvent(
     val timestamp: Instant = Instant.now()
 )
 
+/**
+ * Published to topic `order-failed` when an order is terminally failed
+ * (payment redeliveries exhausted — see KafkaErrorHandlingConfig). The
+ * seat-release compensation (D4): Inventory consumes this and releases any
+ * RESERVED reservation for the order. Carries only the orderId — Inventory
+ * owns the reservation lookup, so the event cannot go stale.
+ */
+data class OrderFailedEvent(
+    val orderId: UUID,
+    val reason: String,
+    val timestamp: Instant = Instant.now()
+)
+
 /** Request DTO for POST /orders. */
 data class CreateOrderRequest(
     val routeId: UUID,

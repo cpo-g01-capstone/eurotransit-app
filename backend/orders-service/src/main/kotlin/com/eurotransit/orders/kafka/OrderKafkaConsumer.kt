@@ -8,6 +8,8 @@ import com.eurotransit.orders.model.ProcessedEvent
 import com.eurotransit.orders.repository.OrderRepository
 import com.eurotransit.orders.repository.ProcessedEventRepository
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runBlocking
+import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.support.Acknowledgment
@@ -31,6 +33,11 @@ import kotlin.coroutines.coroutineContext
  * - In-flight operations are tracked so the shutdown sequence waits for them.
  * - ensureActive() provides a cooperative cancellation checkpoint before
  *   downstream publish.
+ *
+ * NOT a `suspend` @KafkaListener (final-audit BUG-3): a suspend listener on this
+ * Spring Kafka version swallows handler exceptions, so a DB failure here would
+ * never reach the DefaultErrorHandler — no redelivery, no recoverer. Non-suspend
+ * + runBlocking bridge, the pattern ratified as D5 (app ADR 0004, agent-log case 12).
  */
 @Component
 class OrderKafkaConsumer(
@@ -49,19 +56,29 @@ class OrderKafkaConsumer(
             "spring.json.value.default.type=com.eurotransit.orders.event.PaymentAuthorizedEvent"
         ]
     )
-    suspend fun handlePaymentAuthorized(event: PaymentAuthorizedEvent, ack: Acknowledgment) {
+    fun handlePaymentAuthorized(record: ConsumerRecord<String, PaymentAuthorizedEvent?>, ack: Acknowledgment) {
+        val event = record.value() ?: run {
+            // Poison/undeserializable payload: ack and skip (ErrorHandlingDeserializer yields null).
+            ack.acknowledge()
+            return
+        }
+
         // Cooperative shutdown: skip processing, Kafka will rebalance to healthy instance
         if (!shutdownManager.isAcceptingTraffic()) {
             logger.info("Shutting down — not processing event for order {}", event.orderId)
             return // no ack → will be redelivered after rebalance
         }
 
+        runBlocking { handle(event) } // bridge: exceptions must reach the error handler (D5)
+        ack.acknowledge()
+    }
+
+    private suspend fun handle(event: PaymentAuthorizedEvent) {
         val eventId = "${event.orderId}:payment-authorized"
 
         // 1. Dedup check
         if (processedEventRepository.existsByEventId(eventId)) {
             logger.info("Duplicate event {} — skipping", eventId)
-            ack.acknowledge()
             return
         }
 
@@ -102,7 +119,5 @@ class OrderKafkaConsumer(
                 logger.info("Order {} confirmed after payment authorization", event.orderId)
             }
         }
-
-        ack.acknowledge()
     }
 }

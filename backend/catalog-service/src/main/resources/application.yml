@@ -6,6 +6,19 @@ spring:
     timeout-per-shutdown-phase: 50s
   application:
     name: catalog-service
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    consumer:
+      # groupId is set PER-INSTANCE in the listener annotation (cache-building
+      # consumers are broadcast consumers — see InventoryReservedListener).
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: com.eurotransit.*
+    listener:
+      # Trace-context propagation (ADR 0022): browse-cache updates join the order's trace.
+      observation-enabled: true
 management:
   endpoints:
     web:

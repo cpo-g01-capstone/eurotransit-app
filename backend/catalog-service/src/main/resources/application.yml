@@ -16,6 +16,14 @@ spring:
       properties:
         spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
         spring.json.trusted.packages: com.eurotransit.*
+        # Cross-service contract: IGNORE producer type headers. Each producer
+        # writes its OWN event class name into the header; consumers in other
+        # services don't have that class -> ClassNotFound -> every event either
+        # crashed the loop (naked JsonDeserializer) or was silently dropped as
+        # poison (ErrorHandlingDeserializer). Each @KafkaListener declares its
+        # expected type via spring.json.value.default.type instead.
+        # (Same setUseTypeHeaders(false) notifications' KafkaConfig always had.)
+        spring.json.use.type.headers: false
     listener:
       # Trace-context propagation (ADR 0022): browse-cache updates join the order's trace.
       observation-enabled: true

@@ -4,7 +4,9 @@ server:
 
 spring:
   lifecycle:
-    timeout-per-shutdown-phase: 30s
+    # Must exceed the GracefulShutdownManager drain budget (45s + 5s margin).
+    # Chain invariant (helm values / ADR 0002): preStop(5s) + Spring(50s) < terminationGracePeriod(60s).
+    timeout-per-shutdown-phase: 50s
   application:
     name: orders-service
   r2dbc:
@@ -21,14 +23,24 @@ spring:
     password: ${ORDERS_DB_PASSWORD:app}
     baseline-on-migrate: true
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    producer:
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
     consumer:
+      group-id: orders-service
+      auto-offset-reset: earliest
+      # Manual ack is REQUIRED by the graceful-shutdown design: during drain the
+      # consumer early-returns WITHOUT ack so the message is redelivered elsewhere.
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      # ErrorHandlingDeserializer: a poison message must not kill the consumer loop.
       value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
         spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
-        spring.json.trusted.packages: "*"
+        spring.json.trusted.packages: com.eurotransit.*
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    listener:
+      ack-mode: manual
 
 management:
   endpoints:

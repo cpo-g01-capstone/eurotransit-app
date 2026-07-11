@@ -31,3 +31,8 @@ replay_pid*
 .claude.local.md
 
 .gradle
+# Gradle build outputs — never commit (binary churn hides real diffs in review)
+build/
+**/build/
+bin/
+**/bin/

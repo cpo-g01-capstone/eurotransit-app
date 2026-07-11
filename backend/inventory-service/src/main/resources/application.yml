@@ -1,8 +1,41 @@
 server:
   port: 8083
+  shutdown: graceful
+
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 50s
   application:
     name: inventory-service
+  r2dbc:
+    url: ${INVENTORY_DB_R2DBC_URL:r2dbc:postgresql://localhost:5432/inventorydb}
+    username: ${INVENTORY_DB_USERNAME:app}
+    password: ${INVENTORY_DB_PASSWORD:app}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # Flyway uses JDBC (R2DBC is runtime-only). In Kubernetes, mount secret
+    # eurotransit-inventory-db-app and set INVENTORY_DB_JDBC_URL from key jdbc-uri.
+    url: ${INVENTORY_DB_JDBC_URL:jdbc:postgresql://localhost:5432/inventorydb}
+    user: ${INVENTORY_DB_USERNAME:app}
+    password: ${INVENTORY_DB_PASSWORD:app}
+    baseline-on-migrate: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
+    consumer:
+      group-id: inventory-service
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.eurotransit.*
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    listener:
+      ack-mode: manual
+
 management:
   endpoints:
     web:

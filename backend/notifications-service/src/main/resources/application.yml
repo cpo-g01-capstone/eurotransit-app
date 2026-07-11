@@ -1,6 +1,12 @@
 server:
   port: 8085
+  shutdown: graceful
 spring:
+  lifecycle:
+    # Aligned with the fleet-wide shutdown chain: preStop(5s) + Spring(50s) < 60s grace.
+    # Notifications has no GracefulShutdownManager (best-effort service): Spring drains
+    # HTTP natively and unacked Kafka records are simply redelivered after rebalance.
+    timeout-per-shutdown-phase: 50s
   application:
     name: notifications-service
   r2dbc:

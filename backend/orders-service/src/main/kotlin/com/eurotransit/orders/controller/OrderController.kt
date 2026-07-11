@@ -3,6 +3,7 @@ package com.eurotransit.orders.controller
 import com.eurotransit.orders.event.CreateOrderRequest
 import com.eurotransit.orders.event.OrderResponse
 import com.eurotransit.orders.service.OrderService
+import io.github.resilience4j.ratelimiter.RateLimiterRegistry
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PostMapping
@@ -14,8 +15,15 @@ import org.springframework.web.bind.annotation.RestController
 @RestController
 @RequestMapping("/orders")
 class OrderController(
-    private val orderService: OrderService
+    private val orderService: OrderService,
+    rateLimiterRegistry: RateLimiterRegistry
 ) {
+
+    // Backpressure / load shedding (Pillar C, ADR 0018): beyond the configured
+    // rate the API refuses work with an immediate 429 instead of queuing toward
+    // collapse. "Backpressure is not failure; it is controlled refusal" — 429s
+    // are excluded from the SLO error budget (docs/design/slo-definitions.md).
+    private val checkoutLimiter = rateLimiterRegistry.rateLimiter("checkout")
 
     /**
      * Creates a new order. Requires an `Idempotency-Key` header to prevent
@@ -30,6 +38,11 @@ class OrderController(
         @RequestHeader("Idempotency-Key") idempotencyKey: String?,
         @RequestBody request: CreateOrderRequest
     ): ResponseEntity<OrderResponse> {
+        if (!checkoutLimiter.acquirePermission()) {
+            return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", "1")
+                .build()
+        }
         if (idempotencyKey.isNullOrBlank()) {
             return ResponseEntity.badRequest().build()
         }

@@ -10,7 +10,7 @@
 # Default: every PR needs at least one review
 *                                             @vojtech-n @giova95 @Lollegro @marcodonatucci @MauroC0l
 
-# ── Delivery owner — CI workflows are the GitOps boundary ────────────────────
+<!-- # ── Delivery owner — CI workflows are the GitOps boundary ────────────────────
 .github/workflows/                            @vojtech-n
 justfile                                      @vojtech-n
 .claude/                                      @vojtech-n
@@ -32,4 +32,4 @@ backend/catalog/                              @marcodonatucci
 # (covered by default rule; giova95 reviews any PR touching probe config)
 
 # ── Graded collective deliverables ───────────────────────────────────────────
-docs/roles.md                                 @vojtech-n @giova95 @Lollegro @marcodonatucci @MauroC0l
+docs/roles.md                                 @vojtech-n @giova95 @Lollegro @marcodonatucci @MauroC0l -->

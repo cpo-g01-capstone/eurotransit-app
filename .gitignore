@@ -34,3 +34,5 @@ replay_pid*
 # Gradle build outputs — never commit (binary churn hides real diffs in review)
 build/
 **/build/
+bin/
+**/bin/

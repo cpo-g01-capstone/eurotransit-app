@@ -22,8 +22,12 @@ import java.util.concurrent.atomic.AtomicInteger
  *   if (!shutdownManager.isAcceptingTraffic()) return  // skip, will rebalance
  *   shutdownManager.trackInflight { // business logic  }
  *
- * Phase = Int.MAX_VALUE → this bean stops LAST, after Kafka containers.
- * But we flip readiness FIRST so no new HTTP traffic arrives.
+ * Phase = Int.MAX_VALUE → Spring stops SmartLifecycle beans in DESCENDING
+ * phase order, so this bean stops FIRST — before the Kafka listener
+ * containers (default phase Int.MAX_VALUE - 100). That is exactly what the
+ * design needs: readiness flips and the drain starts while the containers
+ * are still polling; the isAcceptingTraffic() guard makes consumers skip
+ * any new message without ack, so it is redelivered after rebalance.
  */
 @Component
 class GracefulShutdownManager : SmartLifecycle, ApplicationContextAware {
@@ -89,5 +93,5 @@ class GracefulShutdownManager : SmartLifecycle, ApplicationContextAware {
 
     override fun stop() { stop {} }
     override fun isRunning(): Boolean = running.get()
-    override fun getPhase(): Int = Int.MAX_VALUE // stop last among SmartLifecycle beans
+    override fun getPhase(): Int = Int.MAX_VALUE // highest phase: started last, stopped FIRST on shutdown
 }

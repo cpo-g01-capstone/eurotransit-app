@@ -67,8 +67,9 @@ class OrderKafkaConsumer(
 
         // 2-3. Track as in-flight so shutdown waits for completion
         shutdownManager.trackInflight {
-            // 2. Business logic + dedup record in ONE transaction
-            transactionalOperator.executeAndAwait {
+            // 2. Business logic + dedup record in ONE transaction.
+            //    The lambda returns whether the state transition actually applied.
+            val confirmed = transactionalOperator.executeAndAwait {
                 val updated = orderRepository.updateStatus(
                     id = event.orderId,
                     newStatus = OrderStatus.CONFIRMED,
@@ -84,18 +85,24 @@ class OrderKafkaConsumer(
                 }
 
                 processedEventRepository.save(ProcessedEvent(eventId, Instant.now()))
+                updated == 1
             }
 
             // Cooperative cancellation checkpoint before downstream publish
             coroutineContext.ensureActive()
 
-            // 3. Publish downstream event (outside TX — at-least-once safe)
-            orderKafkaProducer.sendOrderConfirmed(
-                OrderConfirmedEvent(orderId = event.orderId)
-            )
+            // 3. Publish downstream event (outside TX — at-least-once safe).
+            //    ONLY when the transition applied: publishing order-confirmed for an
+            //    order that was NOT confirmed would make Notifications send the
+            //    customer a confirmation for an unconfirmed order.
+            if (confirmed == true) {
+                orderKafkaProducer.sendOrderConfirmed(
+                    OrderConfirmedEvent(orderId = event.orderId)
+                )
+                logger.info("Order {} confirmed after payment authorization", event.orderId)
+            }
         }
 
         ack.acknowledge()
-        logger.info("Order {} confirmed after payment authorization", event.orderId)
     }
 }

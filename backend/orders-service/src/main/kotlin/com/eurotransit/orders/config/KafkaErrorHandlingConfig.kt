@@ -60,9 +60,16 @@ class KafkaErrorHandlingConfig {
                     orderRepository.updateStatus(orderId, OrderStatus.FAILED, OrderStatus.DRAFT)
                 }
             }
-            // Always publish, even on a replayed exhaustion or if the order was
-            // already FAILED: the Inventory release is a conditional no-op on
-            // replay, and at-least-once beats silently keeping seats locked.
+            // Feedback-loop guard: this service also CONSUMES order-failed
+            // (OrderFailedConsumer). If the exhausted record came from that
+            // topic, republishing would produce order-failed -> fail ->
+            // order-failed... for as long as the outage lasts. The transition
+            // above already did the consumer's job (a DB failure there throws
+            // first, so the container keeps seeking instead) — nothing to emit.
+            if (record.topic() == OrderKafkaProducer.TOPIC_ORDER_FAILED) return@DefaultErrorHandler
+            // Otherwise always publish, even on a replayed exhaustion or if the
+            // order was already FAILED: the Inventory release is a conditional
+            // no-op on replay, and at-least-once beats silently keeping seats locked.
             orderKafkaProducer.sendOrderFailed(
                 OrderFailedEvent(orderId = orderId, reason = ex.cause?.message ?: ex.message ?: "redelivery exhausted"),
             )

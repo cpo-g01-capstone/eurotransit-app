@@ -22,6 +22,11 @@ subprojects {
         apply(plugin = "io.spring.dependency-management")
         apply(plugin = "org.jetbrains.kotlin.jvm")
         apply(plugin = "org.jetbrains.kotlin.plugin.spring")
+        
+        configure<org.gradle.api.plugins.JavaPluginExtension> {
+            sourceCompatibility = JavaVersion.VERSION_21
+            targetCompatibility = JavaVersion.VERSION_21
+        }
     }
 
     

@@ -1,0 +1,8 @@
+ALTER TABLE orders 
+    ADD COLUMN customer_id VARCHAR(255) NOT NULL,
+    ADD COLUMN route_id VARCHAR(255) NOT NULL,
+    ADD COLUMN seat_class VARCHAR(50) NOT NULL,
+    ADD COLUMN quantity INT NOT NULL DEFAULT 1,
+    ADD COLUMN total_amount DECIMAL(10, 2) NOT NULL,
+    ADD COLUMN failure_reason TEXT,
+    ADD COLUMN version INT NOT NULL DEFAULT 0;

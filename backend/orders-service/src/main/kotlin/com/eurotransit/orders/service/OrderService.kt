@@ -4,7 +4,6 @@ import com.eurotransit.orders.event.CreateOrderRequest
 import com.eurotransit.orders.event.OrderPlacedEvent
 import com.eurotransit.orders.event.OrderResponse
 import com.eurotransit.orders.kafka.OrderKafkaProducer
-import com.eurotransit.orders.model.IdempotencyRecord
 import com.eurotransit.orders.model.Order
 import com.eurotransit.orders.model.OrderStatus
 import com.eurotransit.orders.repository.IdempotencyRecordRepository
@@ -69,13 +68,15 @@ class OrderService(
             entityTemplate.insert(
                 Order(id = orderId, status = OrderStatus.DRAFT)
             ).awaitSingle()
-            entityTemplate.insert(
-                IdempotencyRecord(
-                    idempotencyKey = idempotencyKey,
-                    responsePayload = responseJson,
-                    createdAt = Instant.now()
-                )
-            ).awaitSingle()
+            // Explicit @Query INSERT here, not entityTemplate: response_payload
+            // is JSONB and the template binds the Kotlin String as VARCHAR,
+            // which Postgres rejects (BadSqlGrammarException). The repository
+            // method CASTs the bind to jsonb.
+            idempotencyRecordRepository.insert(
+                idempotencyKey = idempotencyKey,
+                responsePayload = responseJson,
+                createdAt = Instant.now()
+            )
         }
 
         // 3. Publish order-placed event (outside TX — at-least-once safe)

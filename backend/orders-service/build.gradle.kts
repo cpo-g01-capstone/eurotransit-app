@@ -27,4 +27,26 @@ dependencies {
     
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("io.projectreactor:reactor-test")
+    testImplementation("org.springframework.kafka:spring-kafka-test")
+    testImplementation("org.testcontainers:junit-jupiter")
+    testImplementation("org.testcontainers:postgresql")
+}
+
+// Override Spring Boot 3.3's managed Testcontainers 1.19.8 (docker-java 3.3.6 returns HTTP 400
+// against newer Docker Desktop's API proxy). Same override as notifications-service.
+extra["testcontainers.version"] = "1.20.4"
+
+// Forward local Docker/Testcontainers env vars to the forked test workers (see the
+// identical block in notifications-service for the full rationale). No-op on CI.
+tasks.withType<Test> {
+    listOf("DOCKER_HOST", "DOCKER_API_VERSION", "TESTCONTAINERS_RYUK_DISABLED").forEach { key ->
+        System.getenv(key)?.let { environment(key, it) }
+    }
+    val dockerDesktopRawSock =
+        file("${System.getProperty("user.home")}/Library/Containers/com.docker.docker/Data/docker.raw.sock")
+    if (dockerDesktopRawSock.exists() && System.getenv("DOCKER_HOST") == null) {
+        environment("DOCKER_HOST", "unix://${dockerDesktopRawSock.absolutePath}")
+        environment("TESTCONTAINERS_RYUK_DISABLED", "true")
+        systemProperty("api.version", "1.51")
+    }
 }

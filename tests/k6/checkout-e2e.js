@@ -16,7 +16,7 @@ import { Rate, Trend } from 'k6/metrics';
 const BASE = __ENV.BASE_URL || 'http://localhost:8082';
 const API = __ENV.API_PREFIX !== undefined ? __ENV.API_PREFIX : '/api';
 const ROUTE_ID = __ENV.ROUTE_ID || '00000000-0000-0000-0000-000000000001';
-const POLL_TIMEOUT_S = Number(__ENV.POLL_TIMEOUT_S || 30);
+const POLL_TIMEOUT_S = Number(__ENV.POLL_TIMEOUT_S || 45); // > worst-case redelivery ladder (~32s), final-audit #7
 
 export const options = {
   vus: Number(__ENV.VUS || 2),

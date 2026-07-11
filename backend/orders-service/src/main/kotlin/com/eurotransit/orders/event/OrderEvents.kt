@@ -26,10 +26,16 @@ data class InventoryReservedEvent(
     val timestamp: Instant = Instant.now()
 )
 
-/** Consumed from topic `payment-authorized` (produced by Payments). */
+/**
+ * Consumed from topic `payment-authorized` (produced by Payments).
+ * `amount` mirrors the producer's field (final-audit #5 — Jackson silently
+ * dropped it before); nullable so events published before the field existed
+ * still deserialize.
+ */
 data class PaymentAuthorizedEvent(
     val orderId: UUID,
     val paymentId: UUID,
+    val amount: java.math.BigDecimal? = null,
     val timestamp: Instant = Instant.now()
 )
 

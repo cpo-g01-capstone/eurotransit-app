@@ -7,6 +7,8 @@ import com.eurotransit.inventory.model.ProcessedEvent
 import com.eurotransit.inventory.repository.ProcessedEventRepository
 import com.eurotransit.inventory.service.InventoryService
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.runBlocking
+import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.support.Acknowledgment
@@ -30,6 +32,15 @@ import kotlin.coroutines.coroutineContext
  * - In-flight operations are tracked so the shutdown sequence waits for them.
  * - ensureActive() provides a cooperative cancellation checkpoint before
  *   downstream publish.
+ *
+ * NOT a `suspend` @KafkaListener (final-audit BUG-3): a suspend listener on this
+ * Spring Kafka version swallows handler exceptions, so InsufficientSeats or a DB
+ * failure here would never reach the DefaultErrorHandler — no redelivery, no
+ * sold-out recoverer, order stuck in DRAFT forever. Non-suspend + runBlocking
+ * bridge, the pattern ratified as D5 (app ADR 0004, agent-log case 12). The
+ * sold-out path is completed by KafkaErrorHandlingConfig: InsufficientSeats is
+ * non-retryable → the recoverer publishes order-failed(SOLD_OUT) → Orders marks
+ * the order FAILED.
  */
 @Component
 class InventoryKafkaConsumer(
@@ -48,19 +59,30 @@ class InventoryKafkaConsumer(
             "spring.json.value.default.type=com.eurotransit.inventory.event.OrderPlacedEvent"
         ]
     )
-    suspend fun handleOrderPlaced(event: OrderPlacedEvent, ack: Acknowledgment) {
+    fun handleOrderPlaced(record: ConsumerRecord<String, OrderPlacedEvent?>, ack: Acknowledgment) {
+        val event = record.value() ?: run {
+            // Poison/undeserializable payload: ack and skip.
+            ack.acknowledge()
+            return
+        }
+
         // Cooperative shutdown: skip processing, Kafka will rebalance to healthy instance
         if (!shutdownManager.isAcceptingTraffic()) {
             logger.info("Shutting down — not processing event for order {}", event.orderId)
             return // no ack → will be redelivered after rebalance
         }
 
+        runBlocking { handle(event) } // bridge: exceptions must reach the error handler (D5)
+        ack.acknowledge()
+        logger.info("Processed order-placed for orderId={}", event.orderId)
+    }
+
+    private suspend fun handle(event: OrderPlacedEvent) {
         val eventId = "${event.orderId}:order-placed"
 
         // 1. Dedup check
         if (processedEventRepository.existsByEventId(eventId)) {
             logger.info("Duplicate event {} — skipping", eventId)
-            ack.acknowledge()
             return
         }
 
@@ -96,8 +118,5 @@ class InventoryKafkaConsumer(
             // 3. Publish downstream event (outside TX — at-least-once safe)
             reservedEvent?.let { inventoryKafkaProducer.sendInventoryReserved(it) }
         }
-
-        ack.acknowledge()
-        logger.info("Processed order-placed for orderId={}", event.orderId)
     }
 }

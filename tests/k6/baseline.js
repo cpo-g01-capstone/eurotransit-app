@@ -3,8 +3,10 @@
 // Steady checkout traffic against the gateway, with thresholds encoding the
 // RATIFIED SLOs (docs/design/slo-definitions.md, config repo):
 //   - latency:  p95 of POST /orders < 500ms
-//   - success:  >= 99.5% non-5xx, where HTTP 429 counts as SUCCESS by design
-//               (load shedding is a controlled refusal, not a failure).
+//   - success:  >= 99.5% non-5xx — DELIBERATELY stricter than the ratified 99%
+//               SLO: a passing baseline must clear the SLO with margin. HTTP 429
+//               counts as SUCCESS by design (load shedding is a controlled
+//               refusal, not a failure).
 //
 // Also the tool that validates the ratified SLO numbers empirically and tunes the
 // ADR 0018 breaker knobs. Run via `just load-baseline` (BASE_URL/VUS/DURATION env).
@@ -23,7 +25,7 @@ export const options = {
   duration: __ENV.DURATION || '3m',
   thresholds: {
     'http_req_duration{endpoint:place_order}': ['p(95)<500'],    // latency SLO
-    checkout_success: ['rate>0.995'],                             // success SLO
+    checkout_success: ['rate>0.995'],                             // stricter than the 99% success SLO (margin)
     // CE-1's containment claim, made executable: Catalog browsing must stay
     // healthy even while Payments is degraded and the breaker is open.
     'http_req_duration{endpoint:browse_catalog}': ['p(95)<500'],

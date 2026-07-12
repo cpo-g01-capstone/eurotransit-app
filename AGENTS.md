@@ -107,8 +107,8 @@ Full detail and rationale live in `CLAUDE.md`.
 - **Notifications failure must never fail checkout** (graceful degradation).
 - **CI holds no cluster credentials.** Workflows must never contain `kubectl`,
   `helm upgrade`, `az aks`, or cluster creds. Image tag = short Git SHA (`${GITHUB_SHA::7}`);
-  `docker push` only on `main`. Cross-repo writes to config use `CONFIG_REPO_PAT`,
-  not `GITHUB_TOKEN`.
+  `docker push` only on `main`. Cross-repo writes to config use a short-lived
+  GitHub App installation token (config-repo ADR 0007), never `GITHUB_TOKEN` or a PAT.
 - Structured concurrency: one `CoroutineScope` per failure domain; cooperative cancellation
   on SIGTERM; no `GlobalScope`; no `runBlocking` outside bootstrap.
 

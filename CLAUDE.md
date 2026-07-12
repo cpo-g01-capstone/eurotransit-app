@@ -55,8 +55,11 @@ Every service must expose:
 - Workflows must NEVER contain `kubectl`, `helm upgrade`, `az aks`, or cluster credentials
 - Image tag = short Git SHA (`${GITHUB_SHA::7}`)
 - `docker push` goes to ACR only on push to `main`, not on PRs
-- After push to ACR, CI commits updated image tags to the **configuration repository** using `CONFIG_REPO_PAT`
-- `GITHUB_TOKEN` is not sufficient for cross-repo writes — use `CONFIG_REPO_PAT`
+- ACR auth is Azure OIDC federation (`azure/login` + `az acr login`) — no registry password (config-repo ADR 0010)
+- After push to ACR, CI commits updated image tags to the **configuration repository** using a
+  short-lived **GitHub App installation token** (`actions/create-github-app-token`, secrets
+  `CONFIG_REPO_APP_ID` / `CONFIG_REPO_APP_PRIVATE_KEY` — config-repo ADR 0007)
+- `GITHUB_TOKEN` is not sufficient for cross-repo writes, and personal PATs are forbidden — use the GitHub App token
 
 ---
 

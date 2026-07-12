@@ -66,11 +66,13 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every PR and on push to `mai
    (advisory for now; reports uploaded as an artifact). Run locally with
    `gradle --init-script config/detekt-init.gradle.kts detekt`.
 3. **images** (main only) — builds each changed service's boot jar, then builds and pushes an
-   immutable image to **GHCR** (`ghcr.io/<owner>/eurotransit-<service>`), tagged with the 7-char
-   Git SHA (`latest` only on `main`), with a build-provenance attestation.
+   immutable image to **ACR** (`acreurotransitg01.azurecr.io/eurotransit/<service>`), tagged with
+   the 7-char Git SHA, with a build-provenance attestation. Registry auth is **Azure OIDC
+   federation** (`azure/login` + `az acr login`) — no registry password (config-repo ADR 0010).
 4. **update-gitops** (main only) — bumps the image tags in
-   `deploy/charts/eurotransit/values.yaml` in the configuration repository (via `CONFIG_REPO_PAT`).
-   Argo CD detects the change and reconciles the cluster.
+   `deploy/charts/eurotransit/values.yaml` in the configuration repository via a short-lived
+   **GitHub App installation token** (config-repo ADR 0007). Argo CD detects the change and
+   reconciles the cluster.
 
 **CI never holds cluster credentials. Deployment happens through Git.**
 
@@ -78,11 +80,12 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on every PR and on push to `mai
 
 | Secret | Scope | Used by |
 |--------|-------|---------|
-| `GITHUB_TOKEN` | automatic (`packages: write`) | push images to GHCR |
-| `CONFIG_REPO_PAT` | fine-grained PAT, `contents: read+write` on `eurotransit-config` only | the GitOps tag bump |
+| `AZURE_CLIENT_ID` / `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` | OIDC federated identity, AcrPush only (config-repo ADR 0010, `infra/acr-oidc/`) | `azure/login` for the ACR push |
+| `CONFIG_REPO_APP_ID` / `CONFIG_REPO_APP_PRIVATE_KEY` | GitHub App, Contents: write on `eurotransit-config` only (config-repo ADR 0007, `infra/gitops-writeback-app/`) | minting the short-lived token for the GitOps tag bump |
 
-Until `CONFIG_REPO_PAT` (and the Helm chart `values.yaml`) exist, the `update-gitops` job
-skips gracefully with a warning instead of failing.
+`GITHUB_TOKEN` is never used for cross-repo writes, and no personal PAT exists anywhere in the
+pipeline. If the GitHub App secrets are missing, the `update-gitops` job skips gracefully with a
+warning instead of failing.
 
 ## Team roles
 

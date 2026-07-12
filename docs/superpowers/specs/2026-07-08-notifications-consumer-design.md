@@ -31,7 +31,7 @@ it, never introduce a synchronous coupling back to checkout.
 
 | ADR | Decision |
 |-----|----------|
-| 001 | Trigger topic = `order-confirmed` only. `notification-requested` is not consumed (orphan topic → config-repo cleanup, agent-log Case 11). |
+| 001 | Trigger topic = `order-confirmed` only. `notification-requested` is not consumed (orphan topic → config-repo cleanup, app ADR 0001). |
 | 002 | Deduplication in a **dedicated PostgreSQL** DB (CloudNativePG `eurotransit-notifications-db`), table `sent_notifications`. |
 | 003 | At-least-once; **manual** offset ack; two-phase `pending → sent` row; send failure → bounded retry → `order-confirmed.DLT`; Notifications-DB down → **block-and-lag**. |
 | 004 | Liveness = local process only; readiness = lifecycle only (drain), **not** Kafka/DB. |

@@ -62,7 +62,7 @@ class OrderFailureRecovererIT : AbstractIntegrationTest() {
 
         recoverer().accept(record("inventory-reserved", id), RuntimeException("payments down"))
 
-        assertEquals(OrderStatus.FAILED, orderRepository.findStatusById(id))
+        assertEquals(OrderStatus.FAILED, orderRepository.findById(id)!!.status)
         assertEquals(listOf(id), published.map { it.orderId })
         assertEquals(0.0, declinedCount())
     }
@@ -73,7 +73,7 @@ class OrderFailureRecovererIT : AbstractIntegrationTest() {
 
         recoverer().accept(record("inventory-reserved", id), RuntimeException("late exhaustion"))
 
-        assertEquals(OrderStatus.CONFIRMED, orderRepository.findStatusById(id), "status untouched")
+        assertEquals(OrderStatus.CONFIRMED, orderRepository.findById(id)!!.status, "status untouched")
         assertTrue(published.isEmpty(), "must NOT publish order-failed for a confirmed order")
         assertEquals(1.0, declinedCount(), "the guard branch is observable")
     }
@@ -94,7 +94,7 @@ class OrderFailureRecovererIT : AbstractIntegrationTest() {
 
         recoverer().accept(record(OrderKafkaProducer.TOPIC_ORDER_FAILED, id), RuntimeException("db down"))
 
-        assertEquals(OrderStatus.FAILED, orderRepository.findStatusById(id), "transition still applies")
+        assertEquals(OrderStatus.FAILED, orderRepository.findById(id)!!.status, "transition still applies")
         assertTrue(published.isEmpty(), "no republish for order-failed records")
     }
 }

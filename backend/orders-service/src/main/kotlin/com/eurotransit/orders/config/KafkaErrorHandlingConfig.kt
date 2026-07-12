@@ -118,8 +118,11 @@ class OrderFailureRecoverer(
             if (record.topic() == OrderKafkaProducer.TOPIC_ORDER_FAILED) return@runBlocking
 
             // Compensation guard (agent-log case 24): see the class doc above.
+            // findById (not a scalar projection): reading the entity maps the
+            // status enum through the entity converter; a single-column enum
+            // projection has no PersistentEntity and fails at runtime.
             val shouldCompensate = fromReserved + fromDraft > 0 ||
-                orderRepository.findStatusById(orderId) == OrderStatus.FAILED
+                orderRepository.findById(orderId)?.status == OrderStatus.FAILED
             if (shouldCompensate) {
                 publishOrderFailed(
                     OrderFailedEvent(

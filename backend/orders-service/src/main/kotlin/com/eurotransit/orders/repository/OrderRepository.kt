@@ -29,12 +29,4 @@ interface OrderRepository : CoroutineCrudRepository<Order, UUID> {
         now: Instant = Instant.now()
     ): Int
 
-    /**
-     * Current status only — used by the recoverer's compensation guard
-     * (agent-log case 24) to distinguish "already FAILED" (replay after a
-     * recoverer crash: still publish, at-least-once) from "reached a terminal
-     * SUCCESS state" (never publish: the seats belong to a confirmed order).
-     */
-    @Query("SELECT status FROM orders WHERE id = :id")
-    suspend fun findStatusById(id: UUID): OrderStatus?
 }

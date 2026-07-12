@@ -154,7 +154,7 @@ error-handler recoverer's fire-and-forget mark-`FAILED`.
    SealedSecret.
 2. `KafkaTopic` CR `order-confirmed.DLT` (partitions/retention team-owned); add to
    `.agent/context/kafka-topics.md`.
-3. Remove/annotate orphan topic `notification-requested` (agent-log Case 11).
+3. Remove/annotate orphan topic `notification-requested` (app ADR 0001).
 4. Helm: notifications probes (liveness/readiness paths above), `resources:`, PDB decision,
    ServiceMonitor.
 5. `docs/design/idempotency.md`: fill the `order-confirmed` row (owner @MauroC0l).

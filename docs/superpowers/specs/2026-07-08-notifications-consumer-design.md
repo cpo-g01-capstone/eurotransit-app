@@ -31,7 +31,7 @@ it, never introduce a synchronous coupling back to checkout.
 
 | ADR | Decision |
 |-----|----------|
-| 001 | Trigger topic = `order-confirmed` only. `notification-requested` is not consumed (orphan topic → config-repo cleanup, agent-log Case 4). |
+| 001 | Trigger topic = `order-confirmed` only. `notification-requested` is not consumed (orphan topic → config-repo cleanup, agent-log Case 11). |
 | 002 | Deduplication in a **dedicated PostgreSQL** DB (CloudNativePG `eurotransit-notifications-db`), table `sent_notifications`. |
 | 003 | At-least-once; **manual** offset ack; two-phase `pending → sent` row; send failure → bounded retry → `order-confirmed.DLT`; Notifications-DB down → **block-and-lag**. |
 | 004 | Liveness = local process only; readiness = lifecycle only (drain), **not** Kafka/DB. |
@@ -58,7 +58,7 @@ message body. Exact schema to be aligned with the Orders producer contract.
 **Implementation note — listener bridge (differs from the original plan; needs team ratification):**
 The handler is **not** a `suspend` @KafkaListener. In this Spring Kafka version a `suspend`
 listener does not propagate exceptions to the `DefaultErrorHandler` (retries/DLT never fire — see
-agent-log Case 5), and a typed payload param on a non-suspend method deserialized to `KafkaNull`.
+agent-log Case 12), and a typed payload param on a non-suspend method deserialized to `KafkaNull`.
 The working form takes the **raw `ConsumerRecord`** and bridges to the suspending service with
 **`runBlocking`**, so exceptions surface synchronously and reach the error handler. `runBlocking`
 here contradicts the `CLAUDE.md` "no runBlocking outside bootstrap" rule; the Kafka consumer thread
@@ -154,7 +154,7 @@ error-handler recoverer's fire-and-forget mark-`FAILED`.
    SealedSecret.
 2. `KafkaTopic` CR `order-confirmed.DLT` (partitions/retention team-owned); add to
    `.agent/context/kafka-topics.md`.
-3. Remove/annotate orphan topic `notification-requested` (agent-log Case 4).
+3. Remove/annotate orphan topic `notification-requested` (agent-log Case 11).
 4. Helm: notifications probes (liveness/readiness paths above), `resources:`, PDB decision,
    ServiceMonitor.
 5. `docs/design/idempotency.md`: fill the `order-confirmed` row (owner @MauroC0l).

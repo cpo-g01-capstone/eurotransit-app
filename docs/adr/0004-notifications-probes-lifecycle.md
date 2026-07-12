@@ -10,7 +10,7 @@
 
 > **Implementation note (RATIFIED by team vote, 2026-07-11):** the `order-confirmed` handler
 > could not be a `suspend` @KafkaListener — in this Spring Kafka version that swallows handler
-> exceptions so retries/DLT never fire (agent-log Case 5). It is implemented as a non-suspend
+> exceptions so retries/DLT never fire (agent-log Case 12). It is implemented as a non-suspend
 > handler that takes the raw `ConsumerRecord` and bridges to the suspending service with
 > `runBlocking`. The team ratified this as the **standard pattern for every @KafkaListener that
 > needs error-handler semantics** — the one sanctioned exception to the `CLAUDE.md` "no
@@ -86,7 +86,7 @@ This decision was drafted with agent assistance and **must be verified by the te
 ratification:
 
 - [x] Ratify (or replace) the non-suspend `ConsumerRecord` + `runBlocking` bridge that
-      deviates from the "no runBlocking outside bootstrap" rule (agent-log Case 5).
+      deviates from the "no runBlocking outside bootstrap" rule (agent-log Case 12).
       **Ratified by team vote on 2026-07-11** — see the implementation note above for scope.
 - [ ] Confirm `db`/`kafka` are **not** wired into the readiness health group
       (`management.endpoint.health.group.readiness.*`); keep the Spring Boot default.
@@ -98,4 +98,4 @@ ratification:
 - ADR 0003 (block-and-lag on DB outage; automatic Kafka reconnect)
 - `CLAUDE.md`: probe rules, async lifecycle requirements, "common mistakes to reject"
 - `backend/notifications-service/src/main/resources/application.yml` (probes already enabled)
-- agent-log Case 5 (config repo) — the suspend-listener exception-swallowing trap.
+- agent-log Case 12 (config repo) — the suspend-listener exception-swallowing trap.

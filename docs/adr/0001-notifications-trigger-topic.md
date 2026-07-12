@@ -28,7 +28,7 @@ preference is **consistency over availability**.
 
 Notifications subscribes to **`order-confirmed` only**. It interprets the authoritative
 domain fact and builds the confirmation itself. The `notification-requested` topic is
-**not** consumed and is treated as unused (see Consequences / agent-log Case 4 for the
+**not** consumed and is treated as unused (see Consequences for the
 required cleanup).
 
 The decisive properties:
@@ -70,7 +70,8 @@ schema and offers less decoupling/extensibility. Adding future notification type
 - Future notification types need a new design (new consumer or superseding ADR).
 - **`notification-requested` is now an orphan topic** (declared but never produced/consumed).
   It must be removed from `.agent/context/kafka-topics.md` and any `KafkaTopic` CRs, or
-  explicitly annotated as "reserved, not yet wired". Tracked as **agent-log Case 4**.
+  explicitly annotated as "reserved, not yet wired". Recorded in the agent log's retired
+  setup-era entries (config repo — full text in Git history).
 
 ## Verification & ownership (agentic-coding policy)
 
@@ -82,12 +83,13 @@ ratification:
 - [ ] Confirm the `order-confirmed` payload carries the recipient/contact snapshot needed to
       build the confirmation without a second event.
 - [ ] Remove or annotate the orphan `notification-requested` topic in config-repo
-      `.agent/context/kafka-topics.md` and any `KafkaTopic` CRs (agent-log Case 4).
+      `.agent/context/kafka-topics.md` and any `KafkaTopic` CRs.
 
 ## References
 
 - `.agent/context/money-path.md`, `.agent/context/kafka-topics.md` (config repo)
 - Capstone PDF: "Notifications — Sends confirmations. Fully asynchronous; failure must
   degrade gracefully."
-- agent-log Case 4 (config repo `docs/agent-log.md`) — the topology inconsistency this ADR resolves.
+- agent log (config repo), retired setup-era entry — the topology inconsistency this ADR
+  resolves (full text in Git history).
 - ADR 0002 — deduplication store.

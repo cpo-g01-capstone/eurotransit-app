@@ -1,0 +1,99 @@
+@import 'tailwindcss';
+/* Self-hosted fonts (npm-pinned, no CDN) — keeps CSP font-src 'self' and the
+   supply chain auditable (07b). */
+@import '@fontsource-variable/archivo/wdth.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/600.css';
+
+@theme {
+  --font-sans: 'Archivo Variable', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* EuroTransit palette — crimson signage on warm paper */
+  --color-crimson: #c8102e;
+  --color-crimson-deep: #8e0d22;
+  --color-crimson-bright: #e6173a;
+  --color-ink: #1a1b20;
+  --color-ink-soft: #2f3138;
+  --color-paper: #faf7f2;
+  --color-paper-dim: #f1ece2;
+  --color-steel: #5c616e;
+  --color-line: #e4ddd1;
+  --color-go: #1e7f4f;
+  --color-go-soft: #e5f3ec;
+  --color-wait: #b45309;
+  --color-wait-soft: #fdf1e0;
+  --color-fail: #b3261e;
+  --color-fail-soft: #fbeae9;
+
+  --animate-pulse-node: pulse-node 1.6s ease-in-out infinite;
+  --animate-rail-dash: rail-dash 1.2s linear infinite;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-crimson);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: var(--color-crimson);
+    color: #fff;
+  }
+}
+
+@utility display-type {
+  font-family: var(--font-sans);
+  font-variation-settings: 'wdth' 88;
+  font-weight: 850;
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+  text-transform: uppercase;
+}
+
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+@keyframes pulse-node {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(200 16 46 / 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgb(200 16 46 / 0);
+  }
+}
+
+@keyframes rail-dash {
+  to {
+    background-position-y: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

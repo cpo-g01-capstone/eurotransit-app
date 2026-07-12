@@ -56,6 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       services: ${{ steps.matrix.outputs.services }}
+      frontend: ${{ steps.matrix.outputs.frontend }}
       short_sha: ${{ steps.sha.outputs.short }}
     steps:
       - uses: actions/checkout@v4
@@ -86,6 +87,12 @@ jobs:
               - 'backend/payments-service/**'
             notifications:
               - 'backend/notifications-service/**'
+            # The SPA is imaged separately (Node/nginx, not Gradle) — see the
+            # image-frontend job. The workflow file itself is included so CI
+            # changes re-image the frontend like `shared` does for services.
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
       - id: matrix
         # On non-push events (e.g. pull_request), rebuild all services. On push, a
         # shared change (root build, settings, the workflow itself) rebuilds all;
@@ -106,6 +113,14 @@ jobs:
           fi
           echo "services=$services" >> "$GITHUB_OUTPUT"
           echo "Services to image: $services"
+          # Same policy for the frontend: non-push events always build it.
+          if [[ "${{ github.event_name }}" != "push" || "${{ steps.filter.outputs.frontend }}" == "true" ]]; then
+            frontend=true
+          else
+            frontend=false
+          fi
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
+          echo "Frontend to image: $frontend"
 
   # ── 2. Compile + test the whole multi-module build ───────────────────────────
   build-test:
@@ -175,6 +190,33 @@ jobs:
           path: "**/build/reports/detekt/**"
           retention-days: 7
           if-no-files-found: ignore
+
+  # ── 2c. Frontend build & tests (Vite/React SPA in frontend/) ─────────────────
+  frontend-checks:
+    name: Frontend build & test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install (lockfile-exact)
+        run: npm ci
+      - name: Typecheck
+        run: npx tsc -b
+      - name: Unit tests
+        run: npm test
+      - name: Lint (incl. XSS-sink rules)
+        run: npm run lint
+      - name: Production build
+        run: npm run build
 
   # ── 3. Build & push immutable images to ACR (main only) ──────────────────────
   images:
@@ -248,13 +290,74 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
+  # ── 3b. Build & push the frontend image to ACR (main only) ───────────────────
+  # Mirrors the `images` job but with a Node/nginx Docker build instead of a
+  # Gradle bootJar. Same OIDC auth, tagging, and provenance rules.
+  image-frontend:
+    name: Image (frontend)
+    needs: [changes, frontend-checks]
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # OIDC: Azure federated login + provenance attestation
+      attestations: write # record build provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Log in to ACR
+        # Registry auth only — NOT a cluster credential (no az aks / kubectl).
+        run: az acr login --name "${ACR_NAME}"
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # Must match the chart's `repository: eurotransit/frontend` in config-repo values.yaml.
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/frontend
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
   # ── 4. Bump image tags in the config repo → Argo CD reconciles ───────────────
   update-gitops:
     name: Update GitOps (config repo)
-    needs: [changes, images]
+    needs: [changes, images, image-frontend]
+    # `always()` because either image job may be legitimately skipped (nothing
+    # in its paths changed); the per-job clauses then require success whenever
+    # that job's inputs DID change. A failed or cancelled image job blocks the
+    # write-back for everything — tags must only ever point at pushed images.
     if: >-
+      always() &&
       github.ref == 'refs/heads/main' &&
-      needs.changes.outputs.services != '[]'
+      (needs.changes.outputs.services != '[]' || needs.changes.outputs.frontend == 'true') &&
+      (needs.changes.outputs.services == '[]' || needs.images.result == 'success') &&
+      (needs.changes.outputs.frontend != 'true' || needs.image-frontend.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: read # writes target the OTHER repo via the GitHub App token, not this one
@@ -311,7 +414,11 @@ jobs:
             echo "::error::$VALUES_PATH not found in $CONFIG_REPO — the chart moved, or the path/checkout is wrong. Refusing to no-op."
             exit 1
           fi
-          for svc in $(echo '${{ needs.changes.outputs.services }}' | jq -r '.[]'); do
+          targets=$(echo '${{ needs.changes.outputs.services }}' | jq -r '.[]')
+          if [[ "${{ needs.changes.outputs.frontend }}" == "true" ]]; then
+            targets="$targets frontend"
+          fi
+          for svc in $targets; do
             echo "Setting .${svc}.image.tag = ${{ needs.changes.outputs.short_sha }}"
             yq -i ".${svc}.image.tag = \"${{ needs.changes.outputs.short_sha }}\"" "$VALUES"
           done

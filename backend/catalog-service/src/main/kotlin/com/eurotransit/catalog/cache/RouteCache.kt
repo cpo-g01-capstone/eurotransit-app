@@ -26,13 +26,17 @@ data class CatalogRoute(
  *    `inventory-reserved` events. It may lag (eventual consistency) and that is
  *    the accepted trade-off: a stale listing is harmless, the CP reservation
  *    path is what prevents overselling. Availability shown here is advisory.
- *  - no database on purpose: state is disposable. On restart the listener
- *    replays the topic from the earliest offset (per-instance consumer group)
- *    and the cache converges again — stale-then-convergent, exactly AP/EL.
+ *  - no database on purpose: state is disposable. On restart the cache is
+ *    HYDRATED from an Inventory snapshot (RouteCacheHydrator) and then kept
+ *    warm by events from the current offset onward — stale-then-convergent,
+ *    exactly AP/EL. (The original replay-from-earliest scheme re-derived the
+ *    state from event history and diverged permanently whenever seats changed
+ *    outside the stream, e.g. a SQL reseed — issue #31.)
  *
- * Seed data mirrors inventory's V2__seed_demo_routes.sql (same deterministic
- * ids). In a fuller system Catalog would hydrate from an Inventory snapshot;
- * for the capstone the mirrored seed keeps the demo deterministic.
+ * The seed below is a FALLBACK only: it mirrors inventory's
+ * V2__seed_demo_routes.sql (same deterministic ids) so browsing works before
+ * the first successful hydration — including when Inventory is down at
+ * startup, which browse must survive (CE-1).
  */
 @Component
 class RouteCache {
@@ -40,8 +44,8 @@ class RouteCache {
     private val routes = ConcurrentHashMap<UUID, CatalogRoute>()
 
     // Best-effort dedup of event redeliveries (at-least-once): enough to avoid
-    // double-decrement within a pod's lifetime; a replay-from-earliest after a
-    // restart rebuilds the same state, so persistence is unnecessary.
+    // double-decrement within a pod's lifetime; after a restart the snapshot
+    // hydration re-baselines the state, so persistence is unnecessary.
     private val seenReservations: MutableSet<UUID> = ConcurrentHashMap.newKeySet()
 
     init {
@@ -70,5 +74,20 @@ class RouteCache {
         routes.computeIfPresent(routeId) { _, r ->
             r.copy(availableSeats = (r.availableSeats - seats).coerceAtLeast(0))
         }
+    }
+
+    /**
+     * Replaces the whole cache with an authoritative Inventory snapshot.
+     * Replace-all, not merge: Inventory is the source of truth, so routes it
+     * no longer knows must disappear here too (retainAll-then-putAll keeps
+     * `all()` non-empty throughout — no flash of an empty catalog).
+     * `seenReservations` is kept: any id already seen is by definition an
+     * event whose effect the snapshot includes (Inventory commits before
+     * publishing), so a later redelivery must still be a no-op.
+     */
+    fun hydrate(snapshot: List<CatalogRoute>) {
+        val byId = snapshot.associateBy { it.id }
+        routes.keys.retainAll(byId.keys)
+        routes.putAll(byId)
     }
 }

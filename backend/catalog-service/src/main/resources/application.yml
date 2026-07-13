@@ -34,6 +34,13 @@ spring:
     listener:
       # Trace-context propagation (ADR 0022): browse-cache updates join the order's trace.
       observation-enabled: true
+# Startup-only snapshot hydration of the advisory cache (issue #31) — NOT a
+# read-path dependency; browse still serves purely from memory (CE-1).
+# In-cluster default = the Inventory ClusterIP service (same convention as
+# orders' payments.base-url); override via INVENTORY_BASE_URL for local dev
+# (e.g. http://localhost:8083).
+inventory:
+  base-url: ${INVENTORY_BASE_URL:http://eurotransit-inventory}
 management:
   metrics:
     distribution:

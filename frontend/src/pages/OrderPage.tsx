@@ -13,7 +13,7 @@ import { loadTrips } from '@/store/trips'
 const HEADLINES: Record<OrderStatus, { title: string; tone: 'neutral' | 'wait' | 'go' | 'fail'; label: string }> = {
   DRAFT: { title: 'Order received — reserving your seats…', tone: 'wait', label: 'Processing' },
   RESERVED: { title: 'Seats held — authorising payment…', tone: 'wait', label: 'Reserved' },
-  CONFIRMED: { title: "You're booked. Buon viaggio!", tone: 'go', label: 'Confirmed' },
+  CONFIRMED: { title: "You're booked. Enjoy the ride!", tone: 'go', label: 'Confirmed' },
   FAILED: { title: 'This order could not be completed', tone: 'fail', label: 'Failed' },
 }
 

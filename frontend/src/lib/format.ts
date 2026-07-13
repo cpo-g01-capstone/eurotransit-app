@@ -1,4 +1,5 @@
-const eur = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' })
+// en-IE: English formatting with the euro symbol leading (€24.50).
+const eur = new Intl.NumberFormat('en-IE', { style: 'currency', currency: 'EUR' })
 
 /** Prices are EUR decimals from the backend (PaymentIntent.currency is fixed to EUR). */
 export function formatEUR(amount: number): string {

@@ -4,7 +4,10 @@
 - **Date:** 2026-07-11
 - **Deciders:** @giova95 (author); @marcodonatucci (catalog area) + team to ratify
 - **Context tags:** catalog, kafka, consistency, chaos
-- **Supersedes / Superseded by:** —
+- **Supersedes / Superseded by:** decision 3's `auto.offset.reset=earliest`
+  replay scheme and the static seed mirror are amended by ADR 0007 (snapshot
+  hydration — the replay re-derived state from history and diverged permanently
+  after out-of-band seat changes, issue #31)
 - **Related:** `docs/design/consistency.md` + `service-boundaries.md` (config repo,
   the AP/EL vs CP/EC contrast this ADR implements); chaos experiment CE-1
   ("Catalog browsing stays healthy"); inventory `V2__seed_demo_routes.sql`

@@ -14,8 +14,12 @@ import org.springframework.stereotype.Component
  *  - PER-INSTANCE consumer group (random suffix): every Catalog replica must see
  *    EVERY event — a shared group would split the stream and the replicas'
  *    caches would diverge. Cache-building consumers are broadcast consumers.
- *  - `auto.offset.reset=earliest`: a fresh pod replays the topic and rebuilds
- *    the cache from history — this is what makes the in-memory choice safe.
+ *  - `auto.offset.reset=latest`: a fresh pod baselines from an Inventory
+ *    SNAPSHOT (RouteCacheHydrator) and only applies events from now on.
+ *    Replaying from earliest re-derived the state from history, which is
+ *    wrong whenever seats changed outside the stream (SQL reseed, capacity
+ *    fix) — every restart re-decremented thousands of historical events on
+ *    top of the seed and clamped availability to 0 permanently (issue #31).
  *  - no manual ack, no dedup table, no error handler chain: losing or skipping
  *    an event only makes the ADVISORY availability slightly stale, which is
  *    Catalog's contract (AP/EL). The CP reservation path owns correctness.
@@ -34,7 +38,7 @@ class InventoryReservedListener(private val cache: RouteCache) {
         // rejected (MethodArgumentNotValidException) and the cache froze at the
         // seed values while offsets kept committing. ConsumerRecord signature =
         // the same null-safe pattern every other consumer in the system uses.
-        properties = ["auto.offset.reset=earliest"],
+        properties = ["auto.offset.reset=latest"],
     )
     fun onInventoryReserved(record: ConsumerRecord<String, InventoryReservedEvent?>) {
         val event = record.value() ?: return // poison message → advisory cache just skips it

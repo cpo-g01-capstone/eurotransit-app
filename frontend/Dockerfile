@@ -16,4 +16,8 @@ FROM nginx:1.29-alpine
 # Replace the stock :80 server with our hardened :8080 one
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
+# Non-root: write pid to a writable location and fix directory permissions
+RUN sed -i 's|/var/run/nginx.pid|/tmp/nginx.pid|' /etc/nginx/nginx.conf \
+    && chown -R nginx:nginx /var/cache/nginx /var/log/nginx
+USER 101
 EXPOSE 8080

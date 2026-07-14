@@ -8,9 +8,8 @@
  * component memory only, and are NEVER sent, stored, or logged.
  */
 
-/** Luhn checksum over a 13-19 digit PAN. */
-export function luhnValid(digits: string): boolean {
-  if (!/^\d{13,19}$/.test(digits)) return false
+/** Luhn checksum (assumes an all-digit string). */
+function luhnChecksum(digits: string): boolean {
   let sum = 0
   let double = false
   for (let i = digits.length - 1; i >= 0; i--) {
@@ -25,14 +24,22 @@ export function luhnValid(digits: string): boolean {
   return sum % 10 === 0
 }
 
+/**
+ * Card number rule: exactly 16 digits, Luhn checksum, and not a degenerate
+ * repeated digit (0000… passes Luhn but is never a real PAN).
+ */
+export function panValid(digits: string): boolean {
+  return /^\d{16}$/.test(digits) && !/^(\d)\1{15}$/.test(digits) && luhnChecksum(digits)
+}
+
 export function digitsOf(value: string): string {
   return value.replace(/\D/g, '')
 }
 
-/** "4242424242424242" → "4242 4242 4242 4242" (as-you-type formatting). */
+/** "4242424242424242" → "4242 4242 4242 4242"; input is capped at 16 digits. */
 export function formatCardNumber(raw: string): string {
   return digitsOf(raw)
-    .slice(0, 19)
+    .slice(0, 16)
     .replace(/(\d{4})(?=\d)/g, '$1 ')
 }
 
@@ -66,7 +73,7 @@ export interface CardDetails {
 export function cardValid(card: CardDetails): boolean {
   return (
     card.holder.trim().length >= 2 &&
-    luhnValid(digitsOf(card.number)) &&
+    panValid(digitsOf(card.number)) &&
     expiryValid(card.expiry) &&
     cvcValid(card.cvc)
   )

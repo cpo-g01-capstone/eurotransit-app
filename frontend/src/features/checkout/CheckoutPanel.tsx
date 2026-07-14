@@ -18,7 +18,7 @@ import {
   expiryValid,
   formatCardNumber,
   formatExpiry,
-  luhnValid,
+  panValid,
   type CardDetails,
 } from './payment'
 
@@ -80,7 +80,9 @@ export function CheckoutPanel({ route, initialSeats }: CheckoutPanelProps) {
         totalPrice: total,
         placedAt: new Date().toISOString(),
       })
-      navigate(`/orders/${order.orderId}`)
+      // justPlaced lets the order page treat the first poll as a live
+      // transition (fast sagas can already be CONFIRMED by then → fireworks).
+      navigate(`/orders/${order.orderId}`, { state: { justPlaced: true } })
     } catch (error) {
       setPhase({ kind: 'error', message: checkoutErrorMessage(error) })
     }
@@ -159,7 +161,7 @@ export function CheckoutPanel({ route, initialSeats }: CheckoutPanelProps) {
               label="Card number"
               value={card.number}
               onChange={(v) => setCard({ ...card, number: formatCardNumber(v) })}
-              error={showCardErrors && !luhnValid(digitsOf(card.number)) ? 'Check the card number.' : ''}
+              error={showCardErrors && !panValid(digitsOf(card.number)) ? 'Enter a valid 16-digit card number.' : ''}
               autoComplete="cc-number"
               inputMode="numeric"
               placeholder="1234 5678 9012 3456"

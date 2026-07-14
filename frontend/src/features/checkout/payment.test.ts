@@ -1,23 +1,29 @@
 import { describe, expect, it } from 'vitest'
-import { cardValid, cvcValid, expiryValid, formatCardNumber, formatExpiry, luhnValid } from './payment'
+import { cardValid, cvcValid, expiryValid, formatCardNumber, formatExpiry, panValid } from './payment'
 
-describe('luhnValid', () => {
-  it('accepts known-good test PANs', () => {
-    expect(luhnValid('4242424242424242')).toBe(true)
-    expect(luhnValid('5555555555554444')).toBe(true)
+describe('panValid', () => {
+  it('accepts known-good 16-digit test PANs', () => {
+    expect(panValid('4242424242424242')).toBe(true)
+    expect(panValid('5555555555554444')).toBe(true)
   })
-  it('rejects checksum failures and bad lengths', () => {
-    expect(luhnValid('4242424242424241')).toBe(false)
-    expect(luhnValid('1234')).toBe(false)
-    expect(luhnValid('')).toBe(false)
-    expect(luhnValid('42424242424242424242')).toBe(false)
+  it('rejects anything that is not exactly 16 digits', () => {
+    expect(panValid('424242424242424')).toBe(false) // 15
+    expect(panValid('42424242424242424')).toBe(false) // 17
+    expect(panValid('0000000000000000000')).toBe(false) // 19 zeros (reported bug)
+    expect(panValid('1234')).toBe(false)
+    expect(panValid('')).toBe(false)
+  })
+  it('rejects checksum failures and degenerate repeated digits', () => {
+    expect(panValid('4242424242424241')).toBe(false) // luhn fail
+    expect(panValid('0000000000000000')).toBe(false) // luhn-valid but not a real PAN
   })
 })
 
 describe('formatting', () => {
-  it('groups the PAN in blocks of four', () => {
+  it('groups the PAN in blocks of four and caps input at 16 digits', () => {
     expect(formatCardNumber('4242424242424242')).toBe('4242 4242 4242 4242')
     expect(formatCardNumber('4242 42x42')).toBe('4242 4242')
+    expect(formatCardNumber('0000000000000000000')).toBe('0000 0000 0000 0000')
   })
   it('inserts the expiry slash', () => {
     expect(formatExpiry('1229')).toBe('12/29')

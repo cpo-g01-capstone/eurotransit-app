@@ -1,10 +1,11 @@
-import { useMemo } from 'react'
-import { Link, useLoaderData } from 'react-router'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useLoaderData, useLocation } from 'react-router'
 import { CircleAlert, PartyPopper, WifiOff } from 'lucide-react'
 import type { OrderStatus } from '@/api/types'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Spinner } from '@/components/ui/spinner'
+import { Fireworks } from '@/features/orders/Fireworks'
 import { SagaTimeline } from '@/features/orders/SagaTimeline'
 import { useOrderPolling } from '@/features/orders/useOrderPolling'
 import { formatEUR } from '@/lib/format'
@@ -19,8 +20,25 @@ const HEADLINES: Record<OrderStatus, { title: string; tone: 'neutral' | 'wait' |
 
 export function OrderPage() {
   const { orderId } = useLoaderData() as { orderId: string }
+  const location = useLocation()
   const { order, notFound, degraded, stalled } = useOrderPolling(orderId)
   const trip = useMemo(() => loadTrips().find((t) => t.orderId === orderId), [orderId])
+
+  // Fireworks fire only on a payment confirmation observed LIVE: a poll
+  // transition into CONFIRMED, or the first poll after arriving straight from
+  // checkout (justPlaced — the saga can outrun the navigation). Re-opening an
+  // already-confirmed booking stays calm.
+  const justPlaced = Boolean((location.state as { justPlaced?: boolean } | null)?.justPlaced)
+  const [celebrate, setCelebrate] = useState(false)
+  const prevStatus = useRef<OrderStatus | null>(justPlaced ? 'DRAFT' : null)
+  useEffect(() => {
+    const status = order?.status
+    if (!status) return
+    if (status === 'CONFIRMED' && prevStatus.current !== null && prevStatus.current !== 'CONFIRMED') {
+      setCelebrate(true)
+    }
+    prevStatus.current = status
+  }, [order?.status])
 
   if (notFound) {
     return (
@@ -39,6 +57,7 @@ export function OrderPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+      {celebrate && <Fireworks onDone={() => setCelebrate(false)} />}
       <p className="eyebrow text-crimson">Booking reference</p>
       <p className="mt-1 font-mono text-xs break-all text-steel">{orderId}</p>
 

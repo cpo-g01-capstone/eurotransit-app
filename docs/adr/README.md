@@ -23,3 +23,4 @@ deployment decisions live in the **configuration repository** `docs/adr/`.
 | [0005](0005-orders-canonical-implementation-and-graceful-shutdown.md) | Canonical Orders implementation and the graceful-shutdown pattern | Proposed | 2026-07-11 |
 | [0006](0006-catalog-event-fed-ap-cache.md) | Catalog: event-fed in-memory AP cache, no database | Proposed | 2026-07-11 |
 | [0007](0007-catalog-snapshot-hydration.md) | Catalog cache: Inventory snapshot hydration + latest-offset consumption | Proposed | 2026-07-13 |
+| [0008](0008-notifications-kafka-consumer-metrics.md) | Notifications Kafka consumer metrics: replay Boot's `DefaultKafkaConsumerFactoryCustomizer` | Proposed | 2026-07-15 |

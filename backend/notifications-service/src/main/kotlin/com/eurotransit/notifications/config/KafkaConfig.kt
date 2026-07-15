@@ -10,6 +10,8 @@ import org.apache.kafka.clients.producer.ProducerConfig
 import org.apache.kafka.common.TopicPartition
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.apache.kafka.common.serialization.StringSerializer
+import org.springframework.beans.factory.ObjectProvider
+import org.springframework.boot.autoconfigure.kafka.DefaultKafkaConsumerFactoryCustomizer
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -34,18 +36,27 @@ import org.springframework.util.backoff.FixedBackOff
 class KafkaConfig {
 
     @Bean
-    fun consumerFactory(props: KafkaProperties): ConsumerFactory<String, OrderConfirmedEvent> {
+    fun consumerFactory(
+        props: KafkaProperties,
+        // This factory is hand-built (below), so Boot's own `@Bean ConsumerFactory` method
+        // backs off (@ConditionalOnMissingBean) and never runs — which means whatever it
+        // would have applied (today: the Micrometer binding; potentially more in future Boot
+        // versions) never happens either, unless we replay it ourselves. See ADR 0008.
+        customizers: ObjectProvider<DefaultKafkaConsumerFactoryCustomizer>,
+    ): ConsumerFactory<String, OrderConfirmedEvent> {
         val config = props.buildConsumerProperties(null).toMutableMap()
         config[ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG] = false
         val json = JsonDeserializer(OrderConfirmedEvent::class.java).apply {
             setUseTypeHeaders(false)
             addTrustedPackages("com.eurotransit.notifications")
         }
-        return DefaultKafkaConsumerFactory(
+        val factory = DefaultKafkaConsumerFactory(
             config,
             StringDeserializer(),
             ErrorHandlingDeserializer(json),
         )
+        customizers.orderedStream().forEach { it.customize(factory) }
+        return factory
     }
 
     /** Producer used only by the DLT recoverer. */

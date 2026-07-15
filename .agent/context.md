@@ -5,8 +5,10 @@ Before generating artifacts that touch delivery, Kafka wiring, or Helm charts, r
 
 ## What this repo owns
 
-- Source code for the five services (Kotlin / Spring Boot / Gradle)
-- Container image build logic (Dockerfile per service)
+- Source code for the five backend services (Kotlin / Spring Boot / Gradle)
+- Source code for the **frontend SPA** (`frontend/` — React + Vite + TypeScript), including its own
+  CI gate and image
+- Container image build logic (Dockerfile per service, plus the frontend)
 - CI workflows (`.github/workflows/`) — build, test, push to ACR, update config-repo
 - k6 load test scripts (`tests/k6/`)
 - `justfile` — the operational task runner

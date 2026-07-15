@@ -8,9 +8,10 @@ For the deployment side (Helm charts, Argo CD, Kafka CRs, SealedSecrets) see the
 
 ## What this repo owns
 
-- Kotlin / Spring Boot source code for five services: catalog, orders, inventory, payments, notifications
+- Kotlin / Spring Boot source code for five backend services: catalog, orders, inventory, payments, notifications
+- The frontend SPA (`frontend/` — React + Vite + TypeScript); see `frontend/README.md`
 - Gradle build files (Kotlin DSL)
-- Dockerfiles (one per service, multi-stage)
+- Dockerfiles (one per service, multi-stage, plus the frontend)
 - GitHub Actions CI workflow
 - k6 load test scripts
 - `justfile` — operational task runner
@@ -65,9 +66,20 @@ Every service must expose:
 
 ## Idempotency requirement
 
-Every Kafka consumer handler in orders, inventory, payments, and notifications must be idempotent.
-A message may be delivered more than once. Handlers must be safe to call multiple times with the same input.
-See configuration repository `.agent/context/money-path.md` for the full deduplication scheme.
+Every Kafka consumer handler must be idempotent: a message may be delivered more than once, so
+handlers must be safe to call multiple times with the same input. The consumers are in **orders,
+inventory, notifications and catalog** — **payments has no Kafka consumer** (since config-repo
+ADR 0018 it is reached by a synchronous HTTP call from Orders; its idempotency is the
+`Idempotency-Key` header + the `payment_intents` unique indexes).
+
+Catalog is the one deliberate exception to consumer-level dedup: its AP cache tolerates a skipped or
+replayed event (ADR 0006).
+
+The synchronous `POST /orders` and `POST /payments/authorize` must be idempotent too, keyed by the
+`Idempotency-Key` header.
+
+See configuration repository `.agent/context/money-path.md` (flow + keys) and
+`docs/design/idempotency.md` (per-consumer scheme) for the full deduplication design.
 
 ---
 

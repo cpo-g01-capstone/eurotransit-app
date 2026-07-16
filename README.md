@@ -12,6 +12,20 @@ Source code, tests, CI workflows, and k6 scripts for the five EuroTransit servic
 | payments | 8084 | Authorizes payment |
 | notifications | 8085 | Sends confirmations |
 
+## Trace a specific order
+
+Distributed traces carry W3C context across the HTTP and Kafka stages of the money path.
+Once Orders knows the generated (or idempotently replayed) order ID, it adds `order.id` as
+a searchable attribute on the active checkout span. Tempo can therefore retrieve the
+whole trace with:
+
+```traceql
+{ span.order.id = "00000000-0000-0000-0000-000000000000" }
+```
+
+`order.id` is intentionally trace-only. It must never be copied to a Prometheus label:
+one label value per order would create unbounded metric cardinality.
+
 ## Notifications service (Kafka consumer)
 
 The terminal, fully-asynchronous stage of the money path. It consumes `order-confirmed` and

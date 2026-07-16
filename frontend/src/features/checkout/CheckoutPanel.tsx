@@ -18,6 +18,7 @@ import {
   expiryValid,
   formatCardNumber,
   formatExpiry,
+  isEmailValid,
   panValid,
   type CardDetails,
 } from './payment'
@@ -45,13 +46,16 @@ export function CheckoutPanel({ route, initialSeats }: CheckoutPanelProps) {
   // device — they are never sent, stored, or logged (see payment.ts).
   const [card, setCard] = useState<CardDetails>({ holder: '', number: '', expiry: '', cvc: '' })
   const [showCardErrors, setShowCardErrors] = useState(false)
+  // Optional confirmation email — the notification recipient carried with the order.
+  const [email, setEmail] = useState('')
 
   const total = seats * route.price
   const submitting = phase.kind === 'submitting'
 
   function pay(event: FormEvent) {
     event.preventDefault()
-    if (!cardValid(card)) {
+    // A malformed email blocks submit (so the user can fix it); an empty one is fine.
+    if (!cardValid(card) || !isEmailValid(email)) {
       setShowCardErrors(true)
       return
     }
@@ -65,7 +69,7 @@ export function CheckoutPanel({ route, initialSeats }: CheckoutPanelProps) {
     const idempotencyKey = newIdempotencyKey()
     try {
       const { order } = await placeOrder(
-        { routeId: route.id, seats },
+        { routeId: route.id, seats, customerContact: email.trim() || undefined },
         {
           idempotencyKey,
           onRetry: (attempt) => setPhase({ kind: 'submitting', retryAttempt: attempt }),
@@ -192,6 +196,16 @@ export function CheckoutPanel({ route, initialSeats }: CheckoutPanelProps) {
                 disabled={submitting}
               />
             </div>
+            <CardField
+              label="Email (optional)"
+              value={email}
+              onChange={setEmail}
+              error={showCardErrors && !isEmailValid(email) ? 'Enter a valid email, or leave it blank.' : ''}
+              autoComplete="email"
+              inputMode="email"
+              placeholder="you@example.com"
+              disabled={submitting}
+            />
           </div>
 
           <Button type="submit" size="lg" className="mt-5 w-full" disabled={submitting}>

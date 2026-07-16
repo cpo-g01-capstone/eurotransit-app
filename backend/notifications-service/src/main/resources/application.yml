@@ -9,6 +9,19 @@ spring:
     timeout-per-shutdown-phase: 50s
   application:
     name: notifications-service
+  mail:
+    host: ${SPRING_MAIL_HOST:localhost}
+    port: ${SPRING_MAIL_PORT:1025}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      # Bounded so a slow/hung SMTP exercises the retry -> DLT path instead of
+      # holding the consumer thread indefinitely (resilience, not a stub).
+      mail.smtp.connectiontimeout: 3000
+      mail.smtp.timeout: 3000
+      mail.smtp.writetimeout: 3000
+      mail.smtp.auth: ${SPRING_MAIL_AUTH:true}
+      mail.smtp.starttls.enable: ${SPRING_MAIL_STARTTLS:true}
   r2dbc:
     url: ${NOTIFICATIONS_DB_R2DBC_URL:r2dbc:postgresql://localhost:5432/notificationsdb}
     username: ${NOTIFICATIONS_DB_USERNAME:app}
@@ -34,6 +47,12 @@ spring:
       observation-enabled: true
     listener:
       observation-enabled: true
+notifications:
+  email:
+    # `logging` (default) = stub sender; `smtp` = real send via spring.mail.*.
+    # The cluster sets NOTIFICATIONS_EMAIL_SENDER=smtp (config repo).
+    sender: ${NOTIFICATIONS_EMAIL_SENDER:logging}
+    from: ${NOTIFICATIONS_EMAIL_FROM:noreply@eurotransit.test}
 management:
   metrics:
     distribution:

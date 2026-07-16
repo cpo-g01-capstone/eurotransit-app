@@ -10,6 +10,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -49,6 +50,33 @@ class OrderPersistenceIT : AbstractIntegrationTest() {
             idempotencyRecordRepository.findByIdempotencyKey(key),
             "the idempotency record must be committed with the order",
         )
+    }
+
+    @Test
+    fun `placeOrder persists an optional customer contact`() = runBlocking {
+        val key = "it-contact-${UUID.randomUUID()}"
+
+        val (response, _) = orderService.placeOrder(
+            key,
+            CreateOrderRequest(UUID.randomUUID(), 1, customerContact = "rider@example.com"),
+        )
+
+        val saved = orderRepository.findById(response.orderId)
+        assertEquals("rider@example.com", saved!!.customerContact)
+    }
+
+    @Test
+    fun `placeOrder leaves customer contact null when absent or blank`() = runBlocking {
+        val absentKey = "it-nocontact-${UUID.randomUUID()}"
+        val (absent, _) = orderService.placeOrder(absentKey, CreateOrderRequest(UUID.randomUUID(), 1))
+        assertNull(orderRepository.findById(absent.orderId)!!.customerContact)
+
+        val blankKey = "it-blank-${UUID.randomUUID()}"
+        val (blank, _) = orderService.placeOrder(
+            blankKey,
+            CreateOrderRequest(UUID.randomUUID(), 1, customerContact = "   "),
+        )
+        assertNull(orderRepository.findById(blank.orderId)!!.customerContact)
     }
 
     @Test

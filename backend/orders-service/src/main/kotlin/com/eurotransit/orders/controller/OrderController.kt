@@ -35,7 +35,12 @@ class OrderController(
         val order = orderRepository.findById(id)
             ?: return ResponseEntity.notFound().build()
         return ResponseEntity.ok(
-            OrderResponse(orderId = order.id, status = order.status.name, message = "")
+            OrderResponse(
+                orderId = order.id,
+                status = order.status.name,
+                message = "",
+                customerContact = order.customerContact
+            )
         )
     }
 

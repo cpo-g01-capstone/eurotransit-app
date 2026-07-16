@@ -111,8 +111,14 @@ export function OrderPage() {
             <div className="mt-4 flex items-start gap-3 rounded-lg bg-go-soft p-4 text-sm text-go">
               <PartyPopper className="mt-0.5 size-5 shrink-0" aria-hidden />
               <p>
-                Your booking is confirmed and your confirmation is on its way. Find this trip
-                anytime under{' '}
+                Your booking is confirmed and your confirmation is on its way
+                {order.customerContact ? (
+                  <>
+                    {' '}
+                    to <strong>{order.customerContact}</strong>
+                  </>
+                ) : null}
+                . Find this trip anytime under{' '}
                 <Link to="/orders" className="font-semibold underline">
                   My trips
                 </Link>

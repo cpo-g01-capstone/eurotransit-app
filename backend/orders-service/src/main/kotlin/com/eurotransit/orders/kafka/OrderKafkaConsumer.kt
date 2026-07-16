@@ -117,8 +117,11 @@ class OrderKafkaConsumer(
             //    order that was NOT confirmed would make Notifications send the
             //    customer a confirmation for an unconfirmed order.
             if (confirmed == true) {
+                // Re-read the order to snapshot the recipient into the event (the
+                // confirming update is count-based and does not return the row).
+                val contact = orderRepository.findById(event.orderId)?.customerContact
                 orderKafkaProducer.sendOrderConfirmed(
-                    OrderConfirmedEvent(orderId = event.orderId)
+                    OrderConfirmedEvent(orderId = event.orderId, customerContact = contact)
                 )
                 logger.info("Order {} confirmed after payment authorization", event.orderId)
             }

@@ -3,10 +3,16 @@ package com.eurotransit.notifications.email
 import com.eurotransit.notifications.OrderConfirmedEvent
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty
 import org.springframework.stereotype.Component
 
-/** Stub sender (ADR/spec): logs and counts. No real SMTP — the project grades resilience. */
+/**
+ * Stub sender: logs and counts, no real SMTP. Default sender (used by tests and
+ * whenever `notifications.email.sender` is unset or `logging`); [SmtpEmailSender]
+ * takes over when that property is `smtp`.
+ */
 @Component
+@ConditionalOnProperty(name = ["notifications.email.sender"], havingValue = "logging", matchIfMissing = true)
 class LoggingEmailSender(registry: MeterRegistry) : EmailSender {
     private val log = LoggerFactory.getLogger(javaClass)
     private val sent = registry.counter("notifications_sent_total")

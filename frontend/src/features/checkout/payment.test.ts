@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { cardValid, cvcValid, expiryValid, formatCardNumber, formatExpiry, panValid } from './payment'
+import {
+  cardValid,
+  cvcValid,
+  expiryValid,
+  formatCardNumber,
+  formatExpiry,
+  isEmailValid,
+  panValid,
+} from './payment'
 
 describe('panValid', () => {
   it('accepts known-good 16-digit test PANs', () => {
@@ -63,5 +71,22 @@ describe('cvcValid', () => {
     expect(cvcValid('1234')).toBe(true)
     expect(cvcValid('12')).toBe(false)
     expect(cvcValid('12a')).toBe(false)
+  })
+})
+
+describe('isEmailValid (optional checkout email)', () => {
+  it('treats empty / whitespace as valid — the field is optional', () => {
+    expect(isEmailValid('')).toBe(true)
+    expect(isEmailValid('   ')).toBe(true)
+  })
+  it('accepts a well-formed address', () => {
+    expect(isEmailValid('rider@example.com')).toBe(true)
+    expect(isEmailValid('  rider@example.com  ')).toBe(true)
+  })
+  it('rejects a malformed address when one is provided', () => {
+    expect(isEmailValid('nope@')).toBe(false)
+    expect(isEmailValid('nope')).toBe(false)
+    expect(isEmailValid('a@b')).toBe(false)
+    expect(isEmailValid('a b@c.com')).toBe(false)
   })
 })

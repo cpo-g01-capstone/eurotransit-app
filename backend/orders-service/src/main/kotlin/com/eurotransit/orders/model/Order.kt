@@ -16,6 +16,9 @@ enum class OrderStatus {
 data class Order(
     @Id val id: UUID,
     val status: OrderStatus = OrderStatus.DRAFT,
+    // Optional per-order notification recipient (email). Nullable and never
+    // validated here — a bad or missing contact must never fail an order.
+    val customerContact: String? = null,
     val createdAt: Instant = Instant.now(),
     val updatedAt: Instant = Instant.now()
 )

@@ -63,6 +63,17 @@ export function cvcValid(value: string): boolean {
   return /^\d{3,4}$/.test(value)
 }
 
+/**
+ * Optional confirmation email. Empty is valid (the field is not required); only
+ * a non-empty, clearly malformed address is rejected. A bad email must never
+ * block checkout — the money path does not depend on it (best-effort notification).
+ */
+export function isEmailValid(value: string): boolean {
+  const v = value.trim()
+  if (v === '') return true
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+}
+
 export interface CardDetails {
   holder: string
   number: string

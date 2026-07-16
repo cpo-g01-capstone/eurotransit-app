@@ -42,6 +42,9 @@ data class PaymentAuthorizedEvent(
 /** Published to topic `order-confirmed` after payment is authorized. */
 data class OrderConfirmedEvent(
     val orderId: UUID,
+    // Optional per-order recipient snapshot; Notifications falls back to its
+    // default when null. MUST stay optional (a required field DLT'd real events).
+    val customerContact: String? = null,
     val timestamp: Instant = Instant.now()
 )
 
@@ -58,15 +61,17 @@ data class OrderFailedEvent(
     val timestamp: Instant = Instant.now()
 )
 
-/** Request DTO for POST /orders. */
+/** Request DTO for POST /orders. `customerContact` is optional (best-effort notification). */
 data class CreateOrderRequest(
     val routeId: UUID,
-    val seats: Int
+    val seats: Int,
+    val customerContact: String? = null
 )
 
-/** Response DTO returned from POST /orders. */
+/** Response DTO returned from POST /orders and GET /orders/{id}. */
 data class OrderResponse(
     val orderId: UUID,
     val status: String,
-    val message: String
+    val message: String,
+    val customerContact: String? = null
 )

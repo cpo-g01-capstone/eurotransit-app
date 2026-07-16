@@ -27,6 +27,8 @@ export type OrderStatus = (typeof ORDER_STATUSES)[number]
 export interface CreateOrderRequest {
   routeId: string
   seats: number
+  /** Optional per-order notification recipient (email). Best-effort; never blocks checkout. */
+  customerContact?: string
 }
 
 export interface OrderResponse {
@@ -34,6 +36,8 @@ export interface OrderResponse {
   status: OrderStatus
   /** "Order accepted for processing" on POST; empty string on GET. */
   message: string
+  /** Optional per-order notification recipient, echoed back on GET. */
+  customerContact?: string
 }
 
 /** Terminal states — polling stops here. */

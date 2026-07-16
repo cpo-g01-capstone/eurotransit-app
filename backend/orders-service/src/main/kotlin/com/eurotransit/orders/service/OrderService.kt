@@ -66,7 +66,13 @@ class OrderService(
             // (TransientDataAccessResourceException). This 500 was the FIRST
             // real POST through the gateway — agent-log case 17.
             entityTemplate.insert(
-                Order(id = orderId, status = OrderStatus.DRAFT)
+                Order(
+                    id = orderId,
+                    status = OrderStatus.DRAFT,
+                    // Trim to null: blank is "not provided". No validation — a bad
+                    // email must never fail an order (best-effort notification).
+                    customerContact = request.customerContact?.trim()?.ifBlank { null }
+                )
             ).awaitSingle()
             // Explicit @Query INSERT here, not entityTemplate: response_payload
             // is JSONB and the template binds the Kotlin String as VARCHAR,

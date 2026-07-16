@@ -1,6 +1,7 @@
 # EuroTransit — Application Repository
 
-Source code, tests, CI workflows, and k6 scripts for the five EuroTransit services.
+Source code, tests, CI workflows, and k6 scripts for the five EuroTransit backend services and the
+frontend SPA.
 
 ## Services
 
@@ -25,6 +26,23 @@ whole trace with:
 
 `order.id` is intentionally trace-only. It must never be copied to a Prometheus label:
 one label value per order would create unbounded metric cardinality.
+Backend services are Kotlin / Spring Boot Gradle subprojects under `backend/<service>/`.
+
+| Frontend | Port | Responsibility |
+|----------|------|----------------|
+| frontend | 8080 (container) / 5173 (dev) | React SPA — the only thing the customer sees |
+
+The SPA lives in [`frontend/`](frontend/) and has its own [README](frontend/README.md) and
+[design doc](frontend/docs/2026-07-12-frontend-design.md). It is built, tested and shipped by this
+repo exactly like a backend service: its own CI jobs (`frontend-checks`, `image-frontend`), its own
+image in ACR, and its own Deployment in the config-repo chart.
+
+## Money path in one line
+
+`POST /orders` → `order-placed` → Inventory reserves → `inventory-reserved` → Orders **calls Payments
+synchronously** (`POST /payments/authorize`, circuit breaker — config-repo ADR 0018) →
+`payment-authorized` → `order-confirmed` → Notifications. Payments has no Kafka consumer.
+Full trace: config-repo `.agent/context/money-path.md`.
 
 ## Notifications service (Kafka consumer)
 
@@ -73,20 +91,27 @@ just load-baseline          # baseline k6 traffic against the deployed cluster
 
 GitHub Actions (`.github/workflows/ci.yml`) runs on every PR and on push to `main`:
 
-1. **changes** — detects which `*-service` modules changed (a root/`shared` change rebuilds all).
+1. **changes** — detects which `*-service` modules changed (a root/`shared` change rebuilds all)
+   and whether the frontend changed.
 2. **build-test** — `gradle build` compiles the multi-module project and runs unit tests (PR gate);
    results are published as a JUnit check on the PR.
 2b. **code-checks** — runs **detekt** static analysis via `config/detekt-init.gradle.kts`
    (advisory for now; reports uploaded as an artifact). Run locally with
    `gradle --init-script config/detekt-init.gradle.kts detekt`.
+2c. **frontend-checks** — the SPA's PR gate: lockfile-exact install, `tsc` typecheck, unit tests,
+   oxlint (including XSS-sink rules), production build.
 3. **images** (main only) — builds each changed service's boot jar, then builds and pushes an
    immutable image to **ACR** (`acreurotransitg01.azurecr.io/eurotransit/<service>`), tagged with
    the 7-char Git SHA, with a build-provenance attestation. Registry auth is **Azure OIDC
    federation** (`azure/login` + `az acr login`) — no registry password (config-repo ADR 0010).
+3b. **image-frontend** (main only) — the same, for the SPA image.
 4. **update-gitops** (main only) — bumps the image tags in
    `deploy/charts/eurotransit/values.yaml` in the configuration repository via a short-lived
    **GitHub App installation token** (config-repo ADR 0007). Argo CD detects the change and
    reconciles the cluster.
+   It `needs` both image jobs: either may legitimately be skipped when nothing in its paths
+   changed, but a **failed** one blocks the write-back for everything — a green run must mean the
+   tags point at images that were actually pushed.
 
 **CI never holds cluster credentials. Deployment happens through Git.**
 

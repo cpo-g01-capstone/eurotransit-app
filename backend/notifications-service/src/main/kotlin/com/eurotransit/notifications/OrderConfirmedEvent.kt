@@ -4,15 +4,17 @@ package com.eurotransit.notifications
  * Payload of the `order-confirmed` topic (ADR-001). The recipient snapshot travels in the
  * event so Notifications never calls back to Orders. Align field names with the Orders producer.
  *
- * `customerContact` MUST stay optional: the Orders producer sends only
- * {orderId, timestamp} — the system has no customer identity yet. With the
- * field required, Jackson rejected every REAL event (the first live checkout
- * went straight to the DLT with valueType=null) while the integration tests,
- * which build this class directly, kept passing. Defaulting keeps the contract
- * honest until a customer concept exists on the producer side.
+ * `customerContact` MUST stay NULLABLE, mirroring the Orders producer's
+ * `String?` (email is optional end-to-end, design spec 2026-07-16). It was
+ * previously non-null with a Kotlin default — but a Kotlin default only covers
+ * an ABSENT property, and Orders serializes an explicit `"customerContact":
+ * null` for contact-less orders, which a non-null type rejects: every no-email
+ * confirmation was dropped/DLT'd while email orders sailed through. The
+ * demo-inbox fallback now lives where it belongs, in [email.SmtpEmailSender]
+ * (`notifications.email.default-to`).
  */
 data class OrderConfirmedEvent(
     val orderId: String,
-    val customerContact: String = "customer@demo.eurotransit.test",
+    val customerContact: String? = null,
     val confirmedAt: String? = null,
 )

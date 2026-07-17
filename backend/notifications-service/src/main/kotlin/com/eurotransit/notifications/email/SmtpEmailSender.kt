@@ -28,20 +28,26 @@ class SmtpEmailSender(
     // Not named `from`: SimpleMailMessage exposes its own `from` bean property, which
     // would shadow this inside the apply {} block below and send with a null sender.
     @Value("\${notifications.email.from:noreply@eurotransit.test}") private val fromAddress: String,
+    // The email is optional end-to-end (design spec 2026-07-16): a null/blank
+    // contact falls back to this sandbox inbox instead of setTo(null), which
+    // threw at send time and retried every contact-less order into the DLT —
+    // the lifecycle dashboard's notification stage sat at zero for them.
+    @Value("\${notifications.email.default-to:customer@demo.eurotransit.test}") private val defaultToAddress: String,
 ) : EmailSender {
     private val log = LoggerFactory.getLogger(javaClass)
     private val sent = registry.counter("notifications_sent_total")
 
     override suspend fun send(event: OrderConfirmedEvent) {
+        val recipient = event.customerContact?.trim()?.ifBlank { null } ?: defaultToAddress
         val message = SimpleMailMessage().apply {
             setFrom(fromAddress)
-            setTo(event.customerContact)
+            setTo(recipient)
             setSubject("Your EuroTransit booking ${event.orderId} is confirmed")
             setText("Your booking ${event.orderId} is confirmed. Thank you for riding EuroTransit.")
         }
         // JavaMailSender is blocking; keep it off the consumer/event-loop thread.
         withContext(Dispatchers.IO) { mailSender.send(message) }
-        log.info("Sent order-confirmation for order={} to={}", event.orderId, event.customerContact)
+        log.info("Sent order-confirmation for order={} to={}", event.orderId, recipient)
         sent.increment()
     }
 }

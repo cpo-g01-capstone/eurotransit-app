@@ -1,7 +1,6 @@
 package com.eurotransit.payments.kafka
 
 import com.eurotransit.payments.event.PaymentAuthorizedEvent
-import com.eurotransit.payments.observability.withRequestObservation
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.stereotype.Component
@@ -12,15 +11,9 @@ class PaymentKafkaProducer(
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    // withRequestObservation: the send runs past coroutine suspension points in
-    // the authorize flow, where the ThreadLocal observation is gone — without
-    // the restored scope the producer span roots a NEW trace instead of joining
-    // the Orders → Payments request trace.
     suspend fun sendPaymentAuthorized(event: PaymentAuthorizedEvent) {
         logger.info("Publishing payment-authorized for orderId={}", event.orderId)
-        withRequestObservation {
-            kafkaTemplate.send(TOPIC_PAYMENT_AUTHORIZED, event.orderId.toString(), event)
-        }
+        kafkaTemplate.send(TOPIC_PAYMENT_AUTHORIZED, event.orderId.toString(), event)
     }
 
     companion object {

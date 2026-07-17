@@ -6,7 +6,6 @@ import com.eurotransit.orders.event.OrderResponse
 import com.eurotransit.orders.kafka.OrderKafkaProducer
 import com.eurotransit.orders.model.Order
 import com.eurotransit.orders.model.OrderStatus
-import com.eurotransit.orders.observability.OrderTraceTagger
 import com.eurotransit.orders.repository.IdempotencyRecordRepository
 import com.fasterxml.jackson.databind.ObjectMapper
 import kotlinx.coroutines.reactor.awaitSingle
@@ -27,8 +26,7 @@ class OrderService(
     // repository.save() maps "id present" to UPDATE (0 rows -> error).
     // See app ADR 0007 / agent-log case 17.
     private val entityTemplate: R2dbcEntityTemplate,
-    private val objectMapper: ObjectMapper,
-    private val orderTraceTagger: OrderTraceTagger,
+    private val objectMapper: ObjectMapper
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -50,13 +48,11 @@ class OrderService(
         if (existing != null) {
             logger.info("Duplicate request with idempotency key {} — returning cached response", idempotencyKey)
             val cachedResponse = objectMapper.readValue(existing.responsePayload, OrderResponse::class.java)
-            orderTraceTagger.tag(cachedResponse.orderId)
             return Pair(cachedResponse, false)
         }
 
         // 2. Create order + cache response in one transaction
         val orderId = UUID.randomUUID()
-        orderTraceTagger.tag(orderId)
         val response = OrderResponse(
             orderId = orderId,
             status = OrderStatus.DRAFT.name,

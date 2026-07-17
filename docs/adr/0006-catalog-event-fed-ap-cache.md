@@ -1,8 +1,9 @@
 # ADR 0006 — Catalog: event-fed in-memory AP cache, no database
 
-- **Status:** Proposed
+- **Status:** Accepted (team ratification 2026-07-17; decision 3's replay scheme
+  already amended by ADR 0007 — see Supersedes below)
 - **Date:** 2026-07-11
-- **Deciders:** @giova95 (author); @marcodonatucci (catalog area) + team to ratify
+- **Deciders:** @giova95 (author); @marcodonatucci (catalog area); ratified by the team 2026-07-17
 - **Context tags:** catalog, kafka, consistency, chaos
 - **Supersedes / Superseded by:** decision 3's `auto.offset.reset=earliest`
   replay scheme and the static seed mirror are amended by ADR 0007 (snapshot

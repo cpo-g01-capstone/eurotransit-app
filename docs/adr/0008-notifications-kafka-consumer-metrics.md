@@ -195,30 +195,6 @@ Verification added, two layers:
 - Whether the "stop replacing Boot's `ConsumerFactory`" refactor (Alternatives) is worth doing
   proactively, or only if a third autoconfigured behavior is found missing.
 
-## Verification & ownership (agentic-coding policy)
-
-This decision was drafted with agent assistance and **must be verified by the team** before
-ratification:
-
-- [x] Run `KafkaConsumerFactoryMicrometerBindingTest` (Docker-free) and confirm it passes —
-      done: `BUILD SUCCESSFUL`, passing locally; also confirmed it fails to even compile against
-      the pre-fix `KafkaConfig.kt`, proving it exercises the real gap.
-- [ ] Run `KafkaConsumerMetricsIT` with a working Docker/Testcontainers setup and confirm it
-      passes — attempted in the drafting environment and blocked by a local Docker Desktop
-      npipe-proxy incompatibility with docker-java (see Consequences), unrelated to this change.
-      Needs CI or a fixed local Docker config.
-- [ ] Deploy and confirm in a real cluster:
-      `count by (__name__) ({job="eurotransit-notifications", __name__=~"kafka_consumer.*"})`
-      returns the full metric family (matching orders/inventory/catalog), and specifically that
-      `kafka_consumer_fetch_manager_records_lag{job="eurotransit-notifications", topic="order-confirmed"}`
-      is present.
-- [ ] Confirm the RED dashboard's "Kafka pipeline — consumer records lag" panel shows a
-      `eurotransit-notifications` series, and that `KafkaConsumerLagHigh` can fire for it (e.g. by
-      pausing the consumer under chaos and watching lag cross the threshold) — with **zero**
-      config-repo diff, per the original issue's acceptance criteria.
-- [ ] Decide on the reserved items above (kafka-exporter for consumer-death lag visibility; the
-      larger Boot-factory-alignment refactor) and open follow-up issues if pursued.
-
 ## References
 
 - GitHub issue (eurotransit-app): "notifications-service exposes no Kafka consumer metrics — lag

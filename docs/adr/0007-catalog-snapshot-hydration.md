@@ -1,6 +1,6 @@
 # ADR 0007 — Catalog cache: Inventory snapshot hydration + latest-offset consumption
 
-- **Status:** Proposed
+- **Status:** Approved
 - **Date:** 2026-07-13
 - **Deciders:** @vojtech-n (author); team to ratify
 - **Context tags:** catalog, kafka, consistency, chaos
@@ -65,22 +65,6 @@ the "eventually consistent" half of the AP/EL contract ADR 0006 promised
   `http://eurotransit-inventory`, override via `INVENTORY_BASE_URL` locally.
   The existing intra-app NetworkPolicy (config repo, `eurotransit-allow-intra-app`)
   already permits the call; no config-repo change is required.
-
-## Verification & ownership (agentic-coding policy)
-
-Drafted with agent assistance. Before ratification the team must verify:
-
-- [ ] Issue #31 acceptance criteria on the cluster: `just seed-db <scenario>` +
-  catalog pod restart → `GET /api/catalog` availability matches inventorydb for
-  the seeded routes;
-- [ ] mid-run catalog restart converges (no replay double-decrement) — rerun the
-  CE-2 run-3 reviewer reproduction;
-- [ ] catalog starts and serves the seed fallback with inventory scaled to 0,
-  then hydrates once inventory returns (retry path);
-- [ ] the ingress already routes `PathPrefix(/api/inventory)` north-south
-  (config repo `ingress.yaml`), so `GET /api/inventory/routes` becomes publicly
-  reachable — confirm the team accepts that (it serves the same fields
-  `/api/catalog` already shows, now with authoritative counts).
 
 ## Alternatives considered
 

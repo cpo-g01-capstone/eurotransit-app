@@ -1,9 +1,11 @@
 # ADR 0005 — Canonical Orders implementation and the graceful-shutdown pattern
 
-- **Status:** Proposed
+- **Status:** Accepted (team ratification 2026-07-17 — all pre-merge conditions in
+  §Corrections verified on `main`: phase comment fixed, conditional `order-confirmed`
+  publish, EM-21 legacy files deleted, `**/build/` ignored)
 - **Date:** 2026-07-11
 - **Deciders:** implementation decisions by @Lollegro (EM-25/EM-21 convergence);
-  recorded, reviewed and annotated by @giova95; team to ratify
+  recorded, reviewed and annotated by @giova95; ratified by the team 2026-07-17
 - **Context tags:** orders, kafka, graceful-shutdown, idempotency, resilience
 - **Supersedes / Superseded by:** —
 - **Related:** config-repo ADR 0018 (synchronous payment

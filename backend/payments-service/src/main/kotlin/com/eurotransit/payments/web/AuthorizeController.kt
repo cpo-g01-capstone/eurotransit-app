@@ -2,6 +2,7 @@ package com.eurotransit.payments.web
 
 import com.eurotransit.payments.event.PaymentAuthorizedEvent
 import com.eurotransit.payments.kafka.PaymentKafkaProducer
+import com.eurotransit.payments.observability.currentRequestObservation
 import com.eurotransit.payments.service.PaymentService
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PostMapping
@@ -54,6 +55,12 @@ class AuthorizeController(
         if (idempotencyKey.isNullOrBlank() || idempotencyKey != request.orderId.toString()) {
             return ResponseEntity.badRequest().build()
         }
+
+        // order.id lands on the authorize server span at observation stop, so the
+        // payment stage of an order is searchable in Tempo even if a trace link
+        // upstream ever breaks. Trace-only attribute — never a Prometheus label.
+        currentRequestObservation()
+            ?.highCardinalityKeyValue("order.id", request.orderId.toString())
 
         val intent = paymentService.authorizePayment(request.orderId, request.amount)
 

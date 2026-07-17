@@ -13,6 +13,26 @@ frontend SPA.
 | payments | 8084 | Authorizes payment |
 | notifications | 8085 | Sends confirmations |
 
+## Trace a specific order
+
+Distributed traces carry W3C context across the HTTP and Kafka stages of the money path.
+Once Orders knows the generated (or idempotently replayed) order ID, it adds `order.id` as
+a searchable attribute on the checkout request observation. Every Kafka consumer stage and
+the Payments authorize span tag `order.id` too, so each stage stays findable even if a
+producer/consumer trace link breaks. Tempo retrieves an order's trace(s) with:
+
+```traceql
+{ span.order.id = "00000000-0000-0000-0000-000000000000" }
+```
+
+Producer sends that run past coroutine suspension points are re-attached to the request
+trace via a short-lived child observation (`observability/CoroutineTraceContext.kt`) — never
+by re-opening the request observation's scope, which races with the Netty event loop and
+broke `/payments/authorize` (reverts #42/#43).
+
+`order.id` is intentionally trace-only. It must never be copied to a Prometheus label:
+one label value per order would create unbounded metric cardinality.
+
 Backend services are Kotlin / Spring Boot Gradle subprojects under `backend/<service>/`.
 
 | Frontend | Port | Responsibility |

@@ -4,6 +4,7 @@ import com.eurotransit.orders.event.OrderFailedEvent
 import com.eurotransit.orders.lifecycle.GracefulShutdownManager
 import com.eurotransit.orders.model.OrderStatus
 import com.eurotransit.orders.model.ProcessedEvent
+import com.eurotransit.orders.observability.OrderTraceTagger
 import com.eurotransit.orders.repository.OrderRepository
 import com.eurotransit.orders.repository.ProcessedEventRepository
 import kotlinx.coroutines.runBlocking
@@ -41,6 +42,7 @@ class OrderFailedConsumer(
     private val entityTemplate: R2dbcEntityTemplate,
     private val transactionalOperator: TransactionalOperator,
     private val shutdownManager: GracefulShutdownManager,
+    private val orderTraceTagger: OrderTraceTagger,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -63,6 +65,9 @@ class OrderFailedConsumer(
             logger.info("Shutting down — not processing order-failed for order {}", event.orderId)
             return
         }
+
+        // Listener thread: the container's observation scope is ThreadLocal-current here.
+        orderTraceTagger.tagConsumerSpan(event.orderId)
 
         runBlocking { handle(event) } // bridge: exceptions must reach the error handler (ADR 0004)
         ack.acknowledge()

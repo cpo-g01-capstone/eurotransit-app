@@ -3,6 +3,8 @@ package com.eurotransit.orders.kafka
 import com.eurotransit.orders.event.OrderConfirmedEvent
 import com.eurotransit.orders.event.OrderFailedEvent
 import com.eurotransit.orders.event.OrderPlacedEvent
+import com.eurotransit.orders.observability.withRequestTraceLink
+import io.micrometer.observation.ObservationRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.stereotype.Component
@@ -10,18 +12,30 @@ import java.util.UUID
 
 @Component
 class OrderKafkaProducer(
-    private val kafkaTemplate: KafkaTemplate<String, Any>
+    private val kafkaTemplate: KafkaTemplate<String, Any>,
+    private val observationRegistry: ObservationRegistry,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
+    // withRequestTraceLink: these sends run past coroutine suspension points,
+    // where the ThreadLocal observation is gone — without the link the producer
+    // span roots a NEW trace instead of joining the request trace, and the
+    // money-path waterfall in Tempo starts at "order-placed send" with no link
+    // back to the HTTP checkout span. When called from the runBlocking listener
+    // bridge (sendOrderConfirmed) it is a no-op and the listener's ThreadLocal
+    // observation parents the producer span as before.
     suspend fun sendOrderPlaced(event: OrderPlacedEvent) {
         logger.info("Publishing order-placed for orderId={}", event.orderId)
-        kafkaTemplate.send(TOPIC_ORDER_PLACED, event.orderId.toString(), event)
+        withRequestTraceLink(observationRegistry, "publish $TOPIC_ORDER_PLACED") {
+            kafkaTemplate.send(TOPIC_ORDER_PLACED, event.orderId.toString(), event)
+        }
     }
 
     suspend fun sendOrderConfirmed(event: OrderConfirmedEvent) {
         logger.info("Publishing order-confirmed for orderId={}", event.orderId)
-        kafkaTemplate.send(TOPIC_ORDER_CONFIRMED, event.orderId.toString(), event)
+        withRequestTraceLink(observationRegistry, "publish $TOPIC_ORDER_CONFIRMED") {
+            kafkaTemplate.send(TOPIC_ORDER_CONFIRMED, event.orderId.toString(), event)
+        }
     }
 
     /**

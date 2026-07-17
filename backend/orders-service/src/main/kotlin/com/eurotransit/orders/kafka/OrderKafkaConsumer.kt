@@ -5,6 +5,7 @@ import com.eurotransit.orders.event.PaymentAuthorizedEvent
 import com.eurotransit.orders.lifecycle.GracefulShutdownManager
 import com.eurotransit.orders.model.OrderStatus
 import com.eurotransit.orders.model.ProcessedEvent
+import com.eurotransit.orders.observability.OrderTraceTagger
 import com.eurotransit.orders.repository.OrderRepository
 import com.eurotransit.orders.repository.ProcessedEventRepository
 import kotlinx.coroutines.ensureActive
@@ -48,7 +49,8 @@ class OrderKafkaConsumer(
     private val entityTemplate: R2dbcEntityTemplate,
     private val orderKafkaProducer: OrderKafkaProducer,
     private val transactionalOperator: TransactionalOperator,
-    private val shutdownManager: GracefulShutdownManager
+    private val shutdownManager: GracefulShutdownManager,
+    private val orderTraceTagger: OrderTraceTagger,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -71,6 +73,9 @@ class OrderKafkaConsumer(
             logger.info("Shutting down — not processing event for order {}", event.orderId)
             return // no ack → will be redelivered after rebalance
         }
+
+        // Listener thread: the container's observation scope is ThreadLocal-current here.
+        orderTraceTagger.tagConsumerSpan(event.orderId)
 
         runBlocking { handle(event) } // bridge: exceptions must reach the error handler (ADR 0004)
         ack.acknowledge()

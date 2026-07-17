@@ -2,6 +2,7 @@ package com.eurotransit.notifications.listener
 
 import com.eurotransit.notifications.OrderConfirmedEvent
 import com.eurotransit.notifications.service.NotificationService
+import io.micrometer.tracing.Tracer
 import kotlinx.coroutines.runBlocking
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.springframework.kafka.annotation.KafkaListener
@@ -23,7 +24,10 @@ import org.springframework.stereotype.Component
  *    blocking poll loop, not a reactive/coroutine context.
  */
 @Component
-class OrderConfirmedListener(private val service: NotificationService) {
+class OrderConfirmedListener(
+    private val service: NotificationService,
+    private val tracer: Tracer,
+) {
 
     @KafkaListener(
         topics = ["order-confirmed"],
@@ -31,6 +35,9 @@ class OrderConfirmedListener(private val service: NotificationService) {
     )
     fun onOrderConfirmed(record: ConsumerRecord<String, OrderConfirmedEvent?>) {
         val event = record.value() ?: return // null value = tombstone, nothing to notify
+        // Listener thread (scope ThreadLocal-current): tag the consumer span so the
+        // terminal stage is findable in Tempo by span.order.id. Trace-only attribute.
+        tracer.currentSpan()?.tag("order.id", event.orderId.toString())
         runBlocking { service.handle(event) }
     }
 }

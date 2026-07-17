@@ -21,6 +21,12 @@ import java.time.Duration
  *
  * responseTimeout(2s) is the per-attempt deadline from ADR 0018: no unbounded
  * waits; a Payments slower than 2s counts as a slow call in the breaker window.
+ *
+ * Built from the auto-configured [WebClient.Builder], NOT WebClient.builder():
+ * the Boot builder carries the ObservationRegistry customizer, so the call gets
+ * a client span and — critically for order tracing — propagates the W3C
+ * `traceparent` header to Payments. Without it the authorize server span roots
+ * a new trace and the money-path waterfall breaks at the payment hop.
  */
 @Configuration
 class PaymentsWebClientConfig {
@@ -29,6 +35,7 @@ class PaymentsWebClientConfig {
     fun paymentsWebClient(
         // In-cluster default = the Payments ClusterIP service; override via env for local dev.
         @Value("\${payments.base-url}") baseUrl: String,
+        webClientBuilder: WebClient.Builder,
     ): WebClient {
         val pool = ConnectionProvider.builder("payments-bulkhead")
             .maxConnections(20)
@@ -40,7 +47,7 @@ class PaymentsWebClientConfig {
             .responseTimeout(Duration.ofSeconds(2))
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 1_000)
 
-        return WebClient.builder()
+        return webClientBuilder
             .baseUrl(baseUrl)
             .clientConnector(ReactorClientHttpConnector(httpClient))
             .build()

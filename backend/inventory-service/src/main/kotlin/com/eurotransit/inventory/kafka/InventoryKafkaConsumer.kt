@@ -6,6 +6,7 @@ import com.eurotransit.inventory.lifecycle.GracefulShutdownManager
 import com.eurotransit.inventory.model.ProcessedEvent
 import com.eurotransit.inventory.repository.ProcessedEventRepository
 import com.eurotransit.inventory.service.InventoryService
+import io.micrometer.tracing.Tracer
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.runBlocking
 import org.apache.kafka.clients.consumer.ConsumerRecord
@@ -51,7 +52,8 @@ class InventoryKafkaConsumer(
     private val entityTemplate: R2dbcEntityTemplate,
     private val inventoryKafkaProducer: InventoryKafkaProducer,
     private val transactionalOperator: TransactionalOperator,
-    private val shutdownManager: GracefulShutdownManager
+    private val shutdownManager: GracefulShutdownManager,
+    private val tracer: Tracer,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -74,6 +76,10 @@ class InventoryKafkaConsumer(
             logger.info("Shutting down — not processing event for order {}", event.orderId)
             return // no ack → will be redelivered after rebalance
         }
+
+        // Listener thread (scope ThreadLocal-current): tag the consumer span so this
+        // stage is findable in Tempo by span.order.id. Trace-only — never a metric label.
+        tracer.currentSpan()?.tag("order.id", event.orderId.toString())
 
         runBlocking { handle(event) } // bridge: exceptions must reach the error handler (ADR 0004)
         ack.acknowledge()

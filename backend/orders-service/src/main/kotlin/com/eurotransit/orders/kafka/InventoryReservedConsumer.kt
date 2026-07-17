@@ -5,6 +5,7 @@ import com.eurotransit.orders.event.InventoryReservedEvent
 import com.eurotransit.orders.lifecycle.GracefulShutdownManager
 import com.eurotransit.orders.model.OrderStatus
 import com.eurotransit.orders.model.ProcessedEvent
+import com.eurotransit.orders.observability.OrderTraceTagger
 import com.eurotransit.orders.repository.OrderRepository
 import com.eurotransit.orders.repository.ProcessedEventRepository
 import kotlinx.coroutines.ensureActive
@@ -56,6 +57,7 @@ class InventoryReservedConsumer(
     private val paymentsClient: PaymentsClient,
     private val transactionalOperator: TransactionalOperator,
     private val shutdownManager: GracefulShutdownManager,
+    private val orderTraceTagger: OrderTraceTagger,
 ) {
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -78,6 +80,9 @@ class InventoryReservedConsumer(
             logger.info("Shutting down — not processing inventory-reserved for order {}", event.orderId)
             return
         }
+
+        // Listener thread: the container's observation scope is ThreadLocal-current here.
+        orderTraceTagger.tagConsumerSpan(event.orderId)
 
         runBlocking { handle(event) } // bridge: exceptions must reach the error handler (see class doc)
         ack.acknowledge()
